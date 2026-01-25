@@ -115,7 +115,7 @@ export function AppSidebar() {
               className={
                 isCollapsed
                   ? "flex flex-col items-center gap-2 rounded-md px-2 py-2"
-                  : "flex flex-row items-center gap-3 rounded-md px-2 py-2"
+                  : "flex flex-row items-start gap-3 rounded-md px-2 py-2"
               }
             >
               {salaoLogoUrl ? (
@@ -131,7 +131,7 @@ export function AppSidebar() {
 
               {!isCollapsed && (
                 <div className="leading-tight">
-                  <div className="text-sm font-semibold text-sidebar-foreground">{salaoNome}</div>
+                  <div className="text-base font-semibold text-sidebar-foreground">{salaoNome}</div>
                 </div>
               )}
             </div>
