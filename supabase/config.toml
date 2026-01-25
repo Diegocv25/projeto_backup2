@@ -1,1 +1,7 @@
 project_id = "qmxbuvdvhsgauigareok"
+
+[functions.admin-create-staff-user]
+verify_jwt = false
+
+[functions.admin-reset-staff-password]
+verify_jwt = false
