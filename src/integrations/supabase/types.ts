@@ -483,6 +483,114 @@ export type Database = {
           },
         ]
       }
+      movimentacoes_estoque: {
+        Row: {
+          created_at: string
+          funcionario_id: string | null
+          id: string
+          observacao: string | null
+          produto_id: string
+          quantidade: number
+          salao_id: string
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          funcionario_id?: string | null
+          id?: string
+          observacao?: string | null
+          produto_id: string
+          quantidade: number
+          salao_id: string
+          tipo: string
+        }
+        Update: {
+          created_at?: string
+          funcionario_id?: string | null
+          id?: string
+          observacao?: string | null
+          produto_id?: string
+          quantidade?: number
+          salao_id?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "movimentacoes_estoque_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movimentacoes_estoque_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movimentacoes_estoque_salao_id_fkey"
+            columns: ["salao_id"]
+            isOneToOne: false
+            referencedRelation: "saloes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      produtos: {
+        Row: {
+          ativo: boolean
+          categoria: string | null
+          created_at: string
+          custo_medio: number
+          estoque_atual: number
+          estoque_minimo: number
+          id: string
+          nome: string
+          preco_venda: number
+          salao_id: string
+          unidade: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          custo_medio?: number
+          estoque_atual?: number
+          estoque_minimo?: number
+          id?: string
+          nome: string
+          preco_venda?: number
+          salao_id: string
+          unidade?: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          custo_medio?: number
+          estoque_atual?: number
+          estoque_minimo?: number
+          id?: string
+          nome?: string
+          preco_venda?: number
+          salao_id?: string
+          unidade?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produtos_salao_id_fkey"
+            columns: ["salao_id"]
+            isOneToOne: false
+            referencedRelation: "saloes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saloes: {
         Row: {
           agendamento_antecedencia_horas: number
@@ -622,6 +730,76 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      vendas_produtos: {
+        Row: {
+          cliente_nome: string | null
+          created_at: string
+          custo_unitario: number
+          forma_pagamento: string | null
+          funcionario_id: string
+          id: string
+          lucro_bruto: number
+          preco_unitario: number
+          produto_id: string
+          quantidade: number
+          salao_id: string
+          total_custo: number
+          total_venda: number
+        }
+        Insert: {
+          cliente_nome?: string | null
+          created_at?: string
+          custo_unitario: number
+          forma_pagamento?: string | null
+          funcionario_id: string
+          id?: string
+          lucro_bruto: number
+          preco_unitario: number
+          produto_id: string
+          quantidade: number
+          salao_id: string
+          total_custo: number
+          total_venda: number
+        }
+        Update: {
+          cliente_nome?: string | null
+          created_at?: string
+          custo_unitario?: number
+          forma_pagamento?: string | null
+          funcionario_id?: string
+          id?: string
+          lucro_bruto?: number
+          preco_unitario?: number
+          produto_id?: string
+          quantidade?: number
+          salao_id?: string
+          total_custo?: number
+          total_venda?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendas_produtos_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_produtos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendas_produtos_salao_id_fkey"
+            columns: ["salao_id"]
+            isOneToOne: false
+            referencedRelation: "saloes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
