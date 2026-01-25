@@ -84,6 +84,8 @@ export default function RelatoriosComparativos({
       const [
         agAtual,
         agPrev,
+        vendasProdutosAtual,
+        vendasProdutosPrev,
         comCalcAtual,
         comCalcPrev,
         comPagasAtual,
@@ -104,6 +106,20 @@ export default function RelatoriosComparativos({
           .eq("status", "concluido")
           .gte("data_hora_inicio", prev.prevInicio.toISOString())
           .lt("data_hora_inicio", prev.prevFimExclusivo.toISOString()),
+
+        supabase
+          .from("vendas_produtos")
+          .select("total_venda")
+          .eq("salao_id", salaoId as string)
+          .gte("created_at", inicioDate.toISOString())
+          .lt("created_at", fimDateExclusivo.toISOString()),
+
+        supabase
+          .from("vendas_produtos")
+          .select("total_venda")
+          .eq("salao_id", salaoId as string)
+          .gte("created_at", prev.prevInicio.toISOString())
+          .lt("created_at", prev.prevFimExclusivo.toISOString()),
 
         supabase
           .from("comissoes")
@@ -136,13 +152,18 @@ export default function RelatoriosComparativos({
           .lt("pago_em", prev.prevFimExclusivo.toISOString()),
       ]);
 
-      const errors = [agAtual.error, agPrev.error, comCalcAtual.error, comCalcPrev.error, comPagasAtual.error, comPagasPrev.error].filter(
+      const errors = [agAtual.error, agPrev.error, vendasProdutosAtual.error, vendasProdutosPrev.error, comCalcAtual.error, comCalcPrev.error, comPagasAtual.error, comPagasPrev.error].filter(
         Boolean,
       );
       if (errors.length) throw errors[0];
 
-      const receitaBrutaAtual = (agAtual.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.total_valor), 0);
-      const receitaBrutaPrev = (agPrev.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.total_valor), 0);
+      const receitaServicosAtual = (agAtual.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.total_valor), 0);
+      const receitaServicosPrev = (agPrev.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.total_valor), 0);
+      const receitaVendasAtual = (vendasProdutosAtual.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.total_venda), 0);
+      const receitaVendasPrev = (vendasProdutosPrev.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.total_venda), 0);
+      
+      const receitaBrutaAtual = receitaServicosAtual + receitaVendasAtual;
+      const receitaBrutaPrev = receitaServicosPrev + receitaVendasPrev;
 
       const comissoesCalcAtual = (comCalcAtual.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.valor_calculado), 0);
       const comissoesCalcPrev = (comCalcPrev.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.valor_calculado), 0);
@@ -191,21 +212,21 @@ export default function RelatoriosComparativos({
 
       <section className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <FinancialKpiCard
-          title="Receita bruta (período)"
+          title="Receita bruta"
           value={formatBRL(comparativosQuery.data?.receitaBrutaAtual ?? 0)}
-          subtitle={`Anterior: ${formatBRL(comparativosQuery.data?.receitaBrutaPrev ?? 0)}`}
+          subtitle={`Serviços + Produtos | Anterior: ${formatBRL(comparativosQuery.data?.receitaBrutaPrev ?? 0)}`}
         />
         
         <FinancialKpiCard
-          title="Comissões (período)"
+          title="Comissões"
           value={formatBRL(comparativosQuery.data?.comissoesPagasAtualSum ?? 0)}
-          subtitle={`Anterior: ${formatBRL(comparativosQuery.data?.comissoesPagasPrevSum ?? 0)}`}
+          subtitle={`Pagas no período | Anterior: ${formatBRL(comparativosQuery.data?.comissoesPagasPrevSum ?? 0)}`}
         />
         
         <FinancialKpiCard
-          title="Receita líquida (período)"
+          title="Receita líquida"
           value={formatBRL(comparativosQuery.data?.receitaLiquidaAtual ?? 0)}
-          subtitle={`Anterior: ${formatBRL(comparativosQuery.data?.receitaLiquidaPrev ?? 0)}`}
+          subtitle={`Receita − Comissões | Anterior: ${formatBRL(comparativosQuery.data?.receitaLiquidaPrev ?? 0)}`}
           highlight={true}
         />
       </section>
