@@ -9,6 +9,7 @@
  import { Input } from "@/components/ui/input";
  import { Label } from "@/components/ui/label";
  import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
  import { supabase } from "@/integrations/supabase/client";
  import { useSalaoId } from "@/hooks/useSalaoId";
  import { toast } from "@/components/ui/use-toast";
@@ -31,6 +32,7 @@
    const queryClient = useQueryClient();
    const [isDialogOpen, setIsDialogOpen] = useState(false);
    const [editingProduto, setEditingProduto] = useState<Produto | null>(null);
+  const [selectedCategoria, setSelectedCategoria] = useState<string | null>(null);
  
    const produtosQuery = useQuery({
      queryKey: ["produtos", salaoId],
@@ -85,7 +87,7 @@
      const formData = new FormData(e.currentTarget);
      saveMutation.mutate({
        nome: formData.get("nome") as string,
-       categoria: formData.get("categoria") as string || null,
+      categoria: selectedCategoria || null,
        unidade: formData.get("unidade") as string,
        preco_venda: Number(formData.get("preco_venda")),
        custo_medio: Number(formData.get("custo_medio")),
@@ -96,6 +98,7 @@
  
    function openDialog(produto: Produto | null) {
      setEditingProduto(produto);
+    setSelectedCategoria(produto?.categoria || null);
      setIsDialogOpen(true);
    }
  
@@ -122,7 +125,15 @@
                  </div>
                  <div className="space-y-2">
                    <Label htmlFor="categoria">Categoria</Label>
-                   <Input id="categoria" name="categoria" defaultValue={editingProduto?.categoria || ""} />
+                  <Select value={selectedCategoria || undefined} onValueChange={setSelectedCategoria}>
+                    <SelectTrigger id="categoria">
+                      <SelectValue placeholder="Selecione a categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="consumo estabelecimento">Consumo estabelecimento</SelectItem>
+                      <SelectItem value="vendas para clientes">Vendas para clientes</SelectItem>
+                    </SelectContent>
+                  </Select>
                  </div>
                  <div className="space-y-2">
                    <Label htmlFor="unidade">Unidade *</Label>
