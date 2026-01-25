@@ -38,7 +38,7 @@ export default function RelatoriosDespesas({
     queryKey: ["relatorios", "totais_periodo", { salaoId, inicio, fim }],
     enabled: !!salaoId && !!inicio && !!fim,
     queryFn: async () => {
-      const [ag, comCalc] = await Promise.all([
+      const [ag, comCalc, vendasProdutos] = await Promise.all([
         supabase
           .from("agendamentos")
           .select("total_valor")
@@ -52,11 +52,20 @@ export default function RelatoriosDespesas({
           .eq("salao_id", salaoId as string)
           .gte("created_at", inicioDate.toISOString())
           .lt("created_at", fimDateExclusivo.toISOString()),
+        supabase
+          .from("vendas_produtos")
+          .select("total_venda")
+          .eq("salao_id", salaoId as string)
+          .gte("created_at", inicioDate.toISOString())
+          .lt("created_at", fimDateExclusivo.toISOString()),
       ]);
       if (ag.error) throw ag.error;
       if (comCalc.error) throw comCalc.error;
+      if (vendasProdutos.error) throw vendasProdutos.error;
 
-      const receitaBruta = (ag.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.total_valor), 0);
+      const receitaServicos = (ag.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.total_valor), 0);
+      const receitaVendasProdutos = (vendasProdutos.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.total_venda), 0);
+      const receitaBruta = receitaServicos + receitaVendasProdutos;
       const comissoesCalc = (comCalc.data ?? []).reduce((acc, r: any) => acc + safeNumber(r.valor_calculado), 0);
       const receitaLiquida = receitaBruta - comissoesCalc;
 
@@ -180,12 +189,12 @@ export default function RelatoriosDespesas({
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Lucro final (período)</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Lucro final</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold tracking-tight">{formatBRL(lucroFinal)}</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Receita líquida − despesas do mês − salários fixos do mês
+              (Serviços + Produtos) − Comissões − Despesas − Salários (período)
             </div>
           </CardContent>
         </Card>

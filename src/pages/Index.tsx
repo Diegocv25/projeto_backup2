@@ -61,7 +61,7 @@ const Index = () => {
     enabled: !!salaoId,
     queryFn: async () => {
       const nowIso = new Date().toISOString();
-      const [clientesCount, agendHojeCount, agendConcluidosMes, comissoesMes, statusHoje, proximosAgendamentos] = await Promise.all([supabase.from("clientes").select("id", {
+      const [clientesCount, agendHojeCount, agendConcluidosMes, comissoesMes, vendasProdutosMes, statusHoje, proximosAgendamentos] = await Promise.all([supabase.from("clientes").select("id", {
         count: "exact",
         head: true
       }).eq("salao_id", salaoId as string), supabase.from("agendamentos").select("id", {
@@ -72,6 +72,8 @@ const Index = () => {
       supabase.from("agendamentos").select("total_valor").eq("salao_id", salaoId as string).eq("status", "concluido").gte("data_hora_inicio", monthStart.toISOString()).lt("data_hora_inicio", new Date(monthEnd.getTime() + 1).toISOString()),
       // comissões do mês (calculadas quando o agendamento vira "concluido")
       supabase.from("comissoes").select("valor_calculado").eq("salao_id", salaoId as string).gte("created_at", monthStart.toISOString()).lt("created_at", new Date(monthEnd.getTime() + 1).toISOString()),
+      // vendas de produtos do mês
+      supabase.from("vendas_produtos").select("total_venda").eq("salao_id", salaoId as string).gte("created_at", monthStart.toISOString()).lt("created_at", new Date(monthEnd.getTime() + 1).toISOString()),
       // status (hoje)
       supabase.from("agendamentos").select("status").eq("salao_id", salaoId as string).gte("data_hora_inicio", todayStart.toISOString()).lt("data_hora_inicio", new Date(todayEnd.getTime() + 1).toISOString()),
       // próximos 5
@@ -80,9 +82,12 @@ const Index = () => {
       if (agendHojeCount.error) throw agendHojeCount.error;
       if (agendConcluidosMes.error) throw agendConcluidosMes.error;
       if (comissoesMes.error) throw comissoesMes.error;
+      if (vendasProdutosMes.error) throw vendasProdutosMes.error;
       if (statusHoje.error) throw statusHoje.error;
       if (proximosAgendamentos.error) throw proximosAgendamentos.error;
-      const receitaBruta = (agendConcluidosMes.data ?? []).reduce((acc: number, r: any) => acc + Number(r.total_valor ?? 0), 0);
+      const receitaServicos = (agendConcluidosMes.data ?? []).reduce((acc: number, r: any) => acc + Number(r.total_valor ?? 0), 0);
+      const receitaVendasProdutos = (vendasProdutosMes.data ?? []).reduce((acc: number, r: any) => acc + Number(r.total_venda ?? 0), 0);
+      const receitaBruta = receitaServicos + receitaVendasProdutos;
       const comissoes = (comissoesMes.data ?? []).reduce((acc: number, r: any) => acc + Number(r.valor_calculado ?? 0), 0);
       const statusCounts = (statusHoje.data ?? []).reduce((acc: Record<DashboardStatus, number>, r: any) => {
         const s = String(r.status) as DashboardStatus;
@@ -130,18 +135,21 @@ const Index = () => {
 
       <section className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <FinancialKpiCard
-          title="Receita bruta (mês)"
+          title="Receita bruta"
           value={dashboard ? formatBRL(dashboard.receitaBruta) : "—"}
+          subtitle="Serviços + Produtos (mês)"
         />
         
         <FinancialKpiCard
-          title="Comissões (mês)"
+          title="Comissões"
           value={dashboard ? formatBRL(dashboard.comissoes) : "—"}
+          subtitle="Total do mês"
         />
         
         <FinancialKpiCard
-          title="Receita líquida (mês)"
+          title="Receita líquida"
           value={dashboard ? formatBRL(dashboard.receitaLiquida) : "—"}
+          subtitle="Receita bruta − Comissões (mês)"
           highlight={true}
         />
       </section>
