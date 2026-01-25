@@ -6,6 +6,7 @@ import { useSalaoId } from "@/hooks/useSalaoId";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { FinancialKpiCard } from "@/components/kpis/FinancialKpiCard";
 
 import {
   changePercent,
@@ -186,23 +187,26 @@ export default function RelatoriosComparativos({
           </CardContent>
         </Card>
 
-        <MetricCompareCard
-          title="Comissão paga (período)"
-          current={comparativosQuery.data?.comissoesPagasAtualSum ?? 0}
-          previous={comparativosQuery.data?.comissoesPagasPrevSum ?? 0}
-        />
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
-        <MetricCompareCard
+      <section className="grid gap-4 grid-cols-1 md:grid-cols-3">
+        <FinancialKpiCard
           title="Receita bruta (período)"
-          current={comparativosQuery.data?.receitaBrutaAtual ?? 0}
-          previous={comparativosQuery.data?.receitaBrutaPrev ?? 0}
+          value={formatBRL(comparativosQuery.data?.receitaBrutaAtual ?? 0)}
+          subtitle={`Anterior: ${formatBRL(comparativosQuery.data?.receitaBrutaPrev ?? 0)}`}
         />
-        <MetricCompareCard
+        
+        <FinancialKpiCard
+          title="Comissões (período)"
+          value={formatBRL(comparativosQuery.data?.comissoesPagasAtualSum ?? 0)}
+          subtitle={`Anterior: ${formatBRL(comparativosQuery.data?.comissoesPagasPrevSum ?? 0)}`}
+        />
+        
+        <FinancialKpiCard
           title="Receita líquida (período)"
-          current={comparativosQuery.data?.receitaLiquidaAtual ?? 0}
-          previous={comparativosQuery.data?.receitaLiquidaPrev ?? 0}
+          value={formatBRL(comparativosQuery.data?.receitaLiquidaAtual ?? 0)}
+          subtitle={`Anterior: ${formatBRL(comparativosQuery.data?.receitaLiquidaPrev ?? 0)}`}
+          highlight={true}
         />
       </section>
     </section>
