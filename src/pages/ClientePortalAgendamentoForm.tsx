@@ -15,9 +15,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 
 type IdName = { id: string; nome: string };
+
+type HorarioFuncionarioRow = {
+  dia_semana: number;
+  inicio: string;
+  fim: string;
+  almoco_inicio: string;
+  almoco_fim: string;
+};
 
 type LoadedAgendamento = {
   id: string;
@@ -196,6 +205,32 @@ export default function ClientePortalAgendamentoFormPage() {
   useEffect(() => {
     setHora("");
   }, [funcionarioId, data]);
+
+  const horariosProfissionalQuery = useQuery({
+    queryKey: ["portal-horarios-profissional", salaoQuery.data?.id, funcionarioId],
+    enabled: !!salaoQuery.data?.id && !!funcionarioId,
+    queryFn: async () => {
+      const sb = supabase as any;
+      const { data, error } = await sb.rpc("portal_horarios_funcionario_public", {
+        _salao_id: salaoQuery.data!.id,
+        _funcionario_id: funcionarioId,
+      });
+      if (error) throw error;
+      return (data ?? []) as HorarioFuncionarioRow[];
+    },
+  });
+
+  const diasAtendimento = useMemo(() => {
+    const rows = horariosProfissionalQuery.data ?? [];
+    const unique = Array.from(new Set(rows.map((r) => Number(r.dia_semana))));
+    return unique.filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  }, [horariosProfissionalQuery.data]);
+
+  const diaSemanaLabel = (dia: number) => {
+    // 0=domingo ... 6=sábado (padrão comum no schema)
+    const labels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    return labels[dia] ?? String(dia);
+  };
 
   const slotsQuery = useAvailableSlots({
     funcionarioId: funcionarioId || null,
@@ -405,6 +440,23 @@ export default function ClientePortalAgendamentoFormPage() {
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {funcionarioId ? (
+                    <div className="flex flex-wrap items-center gap-2 pt-1 text-sm text-muted-foreground">
+                      <span>Dias de atendimento:</span>
+                      {horariosProfissionalQuery.isLoading ? (
+                        <span>Carregando…</span>
+                      ) : diasAtendimento.length > 0 ? (
+                        diasAtendimento.map((d) => (
+                          <Badge key={d} variant="secondary">
+                            {diaSemanaLabel(d)}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span>Não informado</span>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-2">
