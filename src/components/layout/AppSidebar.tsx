@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { BarChart3, CalendarDays, LayoutDashboard, LogOut, Scissors, Settings, UserCog, Users, Wallet } from "lucide-react";
+import { BarChart3, CalendarDays, LayoutDashboard, LogOut, Package, Scissors, Settings, UserCog, Users, Wallet } from "lucide-react";
 
 import { NavLink } from "@/components/NavLink";
 import {

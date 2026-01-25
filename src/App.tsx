@@ -20,6 +20,7 @@ import ClientesPage from "./pages/Clientes";
 import ServicosPage from "./pages/Servicos";
 import FuncionariosPage from "./pages/Funcionarios";
 import RelatoriosPage from "./pages/Relatorios";
+import ProdutosPage from "./pages/Produtos";
 import ConfiguracoesPage from "./pages/Configuracoes";
 import ClientePublicoPage from "./pages/ClientePublico";
 import ClientePortalAppPage from "./pages/ClientePortalApp";
@@ -87,6 +88,8 @@ const App = () => (
                     <Route path="/funcionarios" element={<FuncionariosPage />} />
                     <Route path="/funcionarios/novo" element={<FuncionarioFormPage />} />
                     <Route path="/funcionarios/:id" element={<FuncionarioFormPage />} />
+
+                    <Route path="/produtos" element={<ProdutosPage />} />
 
                     <Route path="/relatorios" element={<RelatoriosPage />} />
                     <Route path="/configuracoes" element={<ConfiguracoesPage />} />
