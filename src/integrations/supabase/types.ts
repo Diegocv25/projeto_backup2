@@ -620,6 +620,14 @@ export type Database = {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      portal_agendamentos_ocupados_public: {
+        Args: { _dia: string; _funcionario_id: string; _salao_id: string }
+        Returns: {
+          data_hora_inicio: string
+          id: string
+          total_duracao_minutos: number
+        }[]
+      }
       portal_cancel_agendamento: {
         Args: { _agendamento_id: string }
         Returns: {
