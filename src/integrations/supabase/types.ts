@@ -120,6 +120,48 @@ export type Database = {
           },
         ]
       }
+      avisos_semanais: {
+        Row: {
+          created_at: string
+          dom: string | null
+          id: string
+          qua: string | null
+          qui: string | null
+          sab: string | null
+          salao_id: string
+          seg: string | null
+          sex: string | null
+          ter: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          dom?: string | null
+          id?: string
+          qua?: string | null
+          qui?: string | null
+          sab?: string | null
+          salao_id: string
+          seg?: string | null
+          sex?: string | null
+          ter?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          dom?: string | null
+          id?: string
+          qua?: string | null
+          qui?: string | null
+          sab?: string | null
+          salao_id?: string
+          seg?: string | null
+          sex?: string | null
+          ter?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       clientes: {
         Row: {
           auth_user_id: string | null
