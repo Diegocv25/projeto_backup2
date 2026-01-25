@@ -23,13 +23,14 @@
    return useQuery({
      queryKey: [
        usePortalRpc ? "portal-slots" : "slots-disponiveis",
+      salaoId ?? null,
        funcionarioId,
        data,
        serviceDurationMinutes,
        excludeAgendamentoId,
      ],
      enabled: !!funcionarioId && !!data && !!serviceDurationMinutes,
-     queryFn: async () => {
+      queryFn: async () => {
        if (!funcionarioId || !data || !serviceDurationMinutes) return [];
  
        const day = new Date(`${data}T00:00:00`);
@@ -64,18 +65,34 @@
        // Se não houver horário configurado para este dia, retorna vazio
        if (!horario) return [];
  
-       // 2. Buscar agendamentos já ocupados no dia
-       const start = startOfDay(day);
-       const next = addDays(start, 1);
- 
-       const { data: busy, error: busyErr } = await supabase
-         .from("agendamentos")
-         .select("id,data_hora_inicio,total_duracao_minutos")
-         .eq("funcionario_id", funcionarioId)
-         .gte("data_hora_inicio", start.toISOString())
-         .lt("data_hora_inicio", next.toISOString())
-         .neq("status", "cancelado");
-       if (busyErr) throw busyErr;
+        // 2. Buscar agendamentos já ocupados no dia
+        let busy: any[] = [];
+        if (usePortalRpc && salaoId) {
+          // Portal: precisa enxergar agendamentos de outros clientes sem vazar dados sensíveis.
+          // Usa RPC SECURITY DEFINER que retorna apenas {id, data_hora_inicio, total_duracao_minutos}.
+          const sb = supabase as any;
+          const { data: busyData, error: busyErr } = await sb.rpc("portal_agendamentos_ocupados_public", {
+            _salao_id: salaoId,
+            _funcionario_id: funcionarioId,
+            _dia: data,
+          });
+          if (busyErr) throw busyErr;
+          busy = (busyData ?? []) as any[];
+        } else {
+          // Sistema: query direta com RLS
+          const start = startOfDay(day);
+          const next = addDays(start, 1);
+
+          const { data: busyData, error: busyErr } = await supabase
+            .from("agendamentos")
+            .select("id,data_hora_inicio,total_duracao_minutos")
+            .eq("funcionario_id", funcionarioId)
+            .gte("data_hora_inicio", start.toISOString())
+            .lt("data_hora_inicio", next.toISOString())
+            .neq("status", "cancelado");
+          if (busyErr) throw busyErr;
+          busy = (busyData ?? []) as any[];
+        }
  
        // 3. Mapear agendamentos ocupados para formato { start, durationMinutes }
        let busyMapped = (busy ?? []).map((b: any) => ({
