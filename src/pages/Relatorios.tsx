@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { format, startOfMonth } from "date-fns";
 
-import RelatoriosConcluidosPorDiaSemana from "@/pages/relatorios/RelatoriosConcluidosPorDiaSemana";
+import RelatoriosComparativos from "@/pages/relatorios/RelatoriosComparativos";
+import RelatoriosDespesas from "@/pages/relatorios/RelatoriosDespesas";
+import RelatoriosPorFuncionario from "@/pages/relatorios/RelatoriosPorFuncionario";
 
 export default function RelatoriosPage() {
   const hoje = useMemo(() => new Date(), []);
@@ -10,16 +12,23 @@ export default function RelatoriosPage() {
   const [inicio, setInicio] = useState(() => format(startOfMonth(hoje), "yyyy-MM-dd"));
   const [fim, setFim] = useState(() => format(hoje, "yyyy-MM-dd"));
 
+  // Competência para despesas/folha (mensal)
+  const [competencia, setCompetencia] = useState(() => format(hoje, "yyyy-MM"));
+
   return (
     <div className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Relatórios</h1>
         <p className="text-sm text-muted-foreground">
-          Quantidade de serviços concluídos por dia da semana em um período.
+          Comparativos por período, desempenho por funcionário e fechamento com despesas.
         </p>
       </header>
 
-      <RelatoriosConcluidosPorDiaSemana inicio={inicio} fim={fim} onChangeInicio={setInicio} onChangeFim={setFim} />
+      <RelatoriosComparativos inicio={inicio} fim={fim} onChangeInicio={setInicio} onChangeFim={setFim} />
+
+      <RelatoriosPorFuncionario inicio={inicio} fim={fim} />
+
+      <RelatoriosDespesas competencia={competencia} onChangeCompetencia={setCompetencia} inicio={inicio} fim={fim} />
     </div>
   );
 }

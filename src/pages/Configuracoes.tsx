@@ -15,7 +15,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PasswordInput } from "@/components/ui/password-input";
 import { strongPasswordSchema } from "@/lib/password-policy";
-import { AvisosSemanaCard } from "@/components/configuracoes/AvisosSemanaCard";
 
 type SalaoForm = {
   id?: string;
@@ -137,11 +136,6 @@ export default function ConfiguracoesPage() {
   const canManageLogo = useMemo(() => {
     const roles = myRolesQuery.data ?? [];
     return roles.includes("admin") || roles.includes("gerente");
-  }, [myRolesQuery.data]);
-
-  const canManageAvisos = useMemo(() => {
-    const roles = myRolesQuery.data ?? [];
-    return roles.includes("admin") || roles.includes("staff") || roles.includes("gerente");
   }, [myRolesQuery.data]);
 
   const uploadLogoMutation = useMutation({
@@ -569,8 +563,6 @@ export default function ConfiguracoesPage() {
           </form>
         </CardContent>
       </Card>
-
-      <AvisosSemanaCard salaoId={salaoQuery.data?.id} canEdit={canManageAvisos} />
 
       <Card>
         <CardHeader>
