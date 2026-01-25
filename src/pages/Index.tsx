@@ -124,13 +124,10 @@ const Index = () => {
       {error ? <div className="text-sm text-destructive">Erro ao carregar o dashboard.</div> : null}
       {isLoading ? <div className="text-sm text-muted-foreground">Carregando…</div> : null}
 
-      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-3">
         <MetricCard title="Total de clientes" value={String(dashboard?.clientesTotal ?? "—")} />
         <MetricCard title="Agendamentos de hoje" value={String(dashboard?.agendamentosHoje ?? "—")} />
         <MetricCard title="Serviços realizados (mês)" value={String(dashboard?.servicosRealizadosMes ?? "—")} />
-        <MetricCard title="Receita bruta (mês)" value={dashboard ? formatBRL(dashboard.receitaBruta) : "—"} />
-        <MetricCard title="Comissões (mês)" value={dashboard ? formatBRL(dashboard.comissoes) : "—"} />
-        <MetricCard title="Receita líquida (mês)" value={dashboard ? formatBRL(dashboard.receitaLiquida) : "—"} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
