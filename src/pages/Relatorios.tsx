@@ -4,6 +4,7 @@ import { format, startOfMonth } from "date-fns";
 import RelatoriosComparativos from "@/pages/relatorios/RelatoriosComparativos";
 import RelatoriosDespesas from "@/pages/relatorios/RelatoriosDespesas";
 import RelatoriosPorFuncionario from "@/pages/relatorios/RelatoriosPorFuncionario";
+import RelatoriosConcluidosPorDiaSemana from "@/pages/relatorios/RelatoriosConcluidosPorDiaSemana";
 
 export default function RelatoriosPage() {
   const hoje = useMemo(() => new Date(), []);
@@ -25,6 +26,8 @@ export default function RelatoriosPage() {
       </header>
 
       <RelatoriosComparativos inicio={inicio} fim={fim} onChangeInicio={setInicio} onChangeFim={setFim} />
+
+      <RelatoriosConcluidosPorDiaSemana inicio={inicio} fim={fim} />
 
       <RelatoriosPorFuncionario inicio={inicio} fim={fim} />
 

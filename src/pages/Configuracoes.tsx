@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PasswordInput } from "@/components/ui/password-input";
 import { strongPasswordSchema } from "@/lib/password-policy";
+import { AvisosSemanaisCard } from "@/components/configuracoes/AvisosSemanaisCard";
 
 type SalaoForm = {
   id?: string;
@@ -675,6 +676,8 @@ export default function ConfiguracoesPage() {
           )}
         </CardContent>
       </Card>
+
+      <AvisosSemanaisCard salaoId={salaoQuery.data?.id} />
     </FormPageShell>
   );
 }
