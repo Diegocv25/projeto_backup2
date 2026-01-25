@@ -7,7 +7,7 @@
    funcionarioId: string | null;
    data: string | null;
    serviceDurationMinutes: number | null;
-  salaoId?: string | null; // Necessário para verificar dias de funcionamento
+   salaoId?: string | null; // Apenas para portal
    excludeAgendamentoId?: string | null; // Em edição, excluir o próprio agendamento
    usePortalRpc?: boolean; // Se true, usa RPC security definer para portal
  };
@@ -15,17 +15,7 @@
  /**
   * Hook unificado para buscar slots disponíveis.
   * Usado tanto no sistema de gestão quanto no portal do cliente.
-  * Garante que a lógica de cálculo de horários disponíveis é idêntica em ambos:
-  * 
-  * 1. Verifica se o SALÃO está aberto naquele dia da semana (dias_funcionamento)
-  * 2. Verifica se o FUNCIONÁRIO trabalha naquele dia (horarios_funcionario)
-  * 3. Busca agendamentos já ocupados (exceto cancelados)
-  * 4. Calcula slots considerando:
-  *    - Horário de trabalho do funcionário
-  *    - Intervalo de almoço
-  *    - Duração do serviço
-  *    - Horários já ocupados
-  *    - Slots de 30 em 30 minutos
+  * Garante que a lógica de cálculo de horários disponíveis é idêntica em ambos.
   */
  export function useAvailableSlots(params: UseAvailableSlotsParams) {
    const { funcionarioId, data, serviceDurationMinutes, salaoId, excludeAgendamentoId, usePortalRpc } = params;
@@ -36,32 +26,19 @@
        funcionarioId,
        data,
        serviceDurationMinutes,
-       salaoId,
        excludeAgendamentoId,
      ],
-     enabled: !!funcionarioId && !!data && !!serviceDurationMinutes && !!salaoId,
+     enabled: !!funcionarioId && !!data && !!serviceDurationMinutes,
      queryFn: async () => {
-       if (!funcionarioId || !data || !serviceDurationMinutes || !salaoId) return [];
+       if (!funcionarioId || !data || !serviceDurationMinutes) return [];
  
        const day = new Date(`${data}T00:00:00`);
-       const dow = getDay(day); // 0=domingo, 1=segunda, ..., 6=sábado
+       const dow = getDay(day);
  
-       // 1. VERIFICAR SE O SALÃO ESTÁ ABERTO NESTE DIA DA SEMANA
-       const { data: diaFuncionamento, error: diaErr } = await supabase
-         .from("dias_funcionamento")
-         .select("fechado,abre_em,fecha_em,intervalo_inicio,intervalo_fim")
-         .eq("salao_id", salaoId)
-         .eq("dia_semana", dow)
-         .maybeSingle();
-       if (diaErr) throw diaErr;
- 
-       // Se o salão está fechado neste dia ou não existe configuração, não há horários disponíveis
-       if (!diaFuncionamento || diaFuncionamento.fechado) return [];
- 
-       // 2. BUSCAR HORÁRIO DE TRABALHO DO FUNCIONÁRIO NO DIA DA SEMANA
+       // 1. Buscar horário de trabalho do funcionário no dia da semana
        let horario: { inicio: string; fim: string; almoco_inicio: string | null; almoco_fim: string | null } | null = null;
  
-       if (usePortalRpc) {
+       if (usePortalRpc && salaoId) {
          // Portal: usa RPC SECURITY DEFINER para evitar problemas de RLS
          const sb = supabase as any;
          const { data: horarios, error: horErr } = await sb.rpc("portal_horarios_funcionario_public", {
@@ -84,10 +61,10 @@
          horario = horarioData;
        }
  
-       // Se o funcionário não trabalha neste dia, retorna vazio
+       // Se não houver horário configurado para este dia, retorna vazio
        if (!horario) return [];
  
-       // 3. BUSCAR AGENDAMENTOS JÁ OCUPADOS NO DIA (exceto cancelados)
+       // 2. Buscar agendamentos já ocupados no dia
        const start = startOfDay(day);
        const next = addDays(start, 1);
  
@@ -100,25 +77,19 @@
          .neq("status", "cancelado");
        if (busyErr) throw busyErr;
  
-       // Mapear agendamentos ocupados para formato { start, durationMinutes }
+       // 3. Mapear agendamentos ocupados para formato { start, durationMinutes }
        let busyMapped = (busy ?? []).map((b: any) => ({
          id: String(b.id),
          start: format(new Date(b.data_hora_inicio), "HH:mm"),
          durationMinutes: Number(b.total_duracao_minutos),
        }));
  
-       // Em edição: excluir o próprio agendamento dos horários ocupados (para não bloquear ele mesmo)
+       // Em edição: excluir o próprio agendamento dos horários ocupados
        if (excludeAgendamentoId) {
          busyMapped = busyMapped.filter((b) => b.id !== excludeAgendamentoId);
        }
  
-       // 4. CALCULAR SLOTS DISPONÍVEIS
-       // Usa a lógica centralizada que considera:
-       // - Janela de trabalho do funcionário
-       // - Intervalo de almoço do funcionário
-       // - Duração do serviço (para garantir que cabe no slot)
-       // - Horários já ocupados
-       // - Incrementos de 30 minutos
+       // 4. Calcular slots disponíveis
        return buildAvailableSlots({
          workStart: String(horario.inicio),
          workEnd: String(horario.fim),
