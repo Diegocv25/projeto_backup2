@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { addDays, format, getDay, startOfDay } from "date-fns";
+import { addDays, format, startOfDay } from "date-fns";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useSalaoId } from "@/hooks/useSalaoId";
-import { buildAvailableSlots } from "@/lib/scheduling";
+import { useAvailableSlots } from "@/hooks/useAvailableSlots";
 
 import { FormPageShell } from "@/components/layout/FormPageShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -165,64 +165,12 @@ export default function AgendamentoFormPage() {
     setHora("");
   }, [funcionarioId, data]);
 
-  const slotsQuery = useQuery({
-    queryKey: ["slots-disponiveis", funcionarioId, data, selectedServico?.duracao_minutos],
-    enabled: !!funcionarioId && !!data && !!selectedServico?.duracao_minutos,
-    queryFn: async () => {
-      const day = new Date(`${data}T00:00:00`);
-      const dow = getDay(day);
-
-      const { data: horario, error: horErr } = await supabase
-        .from("horarios_funcionario")
-        .select("inicio,fim,almoco_inicio,almoco_fim")
-        .eq("funcionario_id", funcionarioId)
-        .eq("dia_semana", dow)
-        .maybeSingle();
-      if (horErr) throw horErr;
-      if (!horario) return [] as string[];
-
-      const start = startOfDay(day);
-      const next = addDays(start, 1);
-
-      const { data: busy, error: busyErr } = await supabase
-        .from("agendamentos")
-        .select("data_hora_inicio,total_duracao_minutos,status")
-        .eq("funcionario_id", funcionarioId)
-        .gte("data_hora_inicio", start.toISOString())
-        .lt("data_hora_inicio", next.toISOString())
-        .neq("status", "cancelado");
-      if (busyErr) throw busyErr;
-
-      const busyMapped = (busy ?? []).map((b: any) => ({
-        start: format(new Date(b.data_hora_inicio), "HH:mm"),
-        durationMinutes: Number(b.total_duracao_minutos),
-      }));
-
-      // Em edição: permite o slot do próprio agendamento atual (evita sumir o horário selecionado)
-      if (isEdit && agendamentoQuery.data) {
-        const selfStart = format(new Date(agendamentoQuery.data.data_hora_inicio), "HH:mm");
-        const selfDuration = Number(agendamentoQuery.data.total_duracao_minutos);
-        return buildAvailableSlots({
-          workStart: String(horario.inicio),
-          workEnd: String(horario.fim),
-          lunchStart: (horario.almoco_inicio as any) ?? null,
-          lunchEnd: (horario.almoco_fim as any) ?? null,
-          slotStepMinutes: 30,
-          serviceDurationMinutes: Number(selectedServico?.duracao_minutos ?? 0),
-          busy: busyMapped.filter((b) => !(b.start === selfStart && b.durationMinutes === selfDuration)),
-        });
-      }
-
-      return buildAvailableSlots({
-        workStart: String(horario.inicio),
-        workEnd: String(horario.fim),
-        lunchStart: (horario.almoco_inicio as any) ?? null,
-        lunchEnd: (horario.almoco_fim as any) ?? null,
-        slotStepMinutes: 30,
-        serviceDurationMinutes: Number(selectedServico?.duracao_minutos ?? 0),
-        busy: busyMapped,
-      });
-    },
+  const slotsQuery = useAvailableSlots({
+    funcionarioId: funcionarioId || null,
+    data: data || null,
+    serviceDurationMinutes: selectedServico?.duracao_minutos ?? null,
+    excludeAgendamentoId: isEdit && agendamentoQuery.data ? agendamentoQuery.data.id : null,
+    usePortalRpc: false,
   });
 
   const policyMode = String(salaoConfigQuery.data?.agendamento_antecedencia_modo ?? "horas");
