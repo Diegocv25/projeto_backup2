@@ -6,6 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useSalaoId } from "@/hooks/useSalaoId";
+import { formatBRL } from "@/pages/relatorios/relatorios-utils";
+import { FinancialKpiCard } from "@/components/kpis/FinancialKpiCard";
+
 function MetricCard({
   title,
   value
@@ -35,12 +38,7 @@ function statusBadgeVariant(status: DashboardStatus): "default" | "secondary" | 
   if (status === "confirmado") return "default";
   return "outline";
 }
-function formatBRL(value: number) {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  });
-}
+
 const Index = () => {
   const {
     data: salaoId
@@ -128,6 +126,24 @@ const Index = () => {
         <MetricCard title="Total de clientes" value={String(dashboard?.clientesTotal ?? "—")} />
         <MetricCard title="Agendamentos de hoje" value={String(dashboard?.agendamentosHoje ?? "—")} />
         <MetricCard title="Serviços realizados (mês)" value={String(dashboard?.servicosRealizadosMes ?? "—")} />
+      </section>
+
+      <section className="grid gap-4 grid-cols-1 md:grid-cols-3">
+        <FinancialKpiCard
+          title="Receita bruta (mês)"
+          value={dashboard ? formatBRL(dashboard.receitaBruta) : "—"}
+        />
+        
+        <FinancialKpiCard
+          title="Comissões (mês)"
+          value={dashboard ? formatBRL(dashboard.comissoes) : "—"}
+        />
+        
+        <FinancialKpiCard
+          title="Receita líquida (mês)"
+          value={dashboard ? formatBRL(dashboard.receitaLiquida) : "—"}
+          highlight={true}
+        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
