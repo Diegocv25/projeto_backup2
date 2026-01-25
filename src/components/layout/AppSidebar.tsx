@@ -30,6 +30,7 @@ const allItems = {
     { title: "Clientes", url: "/clientes", icon: Users },
     { title: "Serviços", url: "/servicos", icon: Scissors },
     { title: "Funcionários", url: "/funcionarios", icon: UserCog },
+   { title: "Produtos", url: "/produtos", icon: Package },
     { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
     { title: "Configurações", url: "/configuracoes", icon: Settings },
   ],
@@ -39,6 +40,7 @@ const allItems = {
     { title: "Clientes", url: "/clientes", icon: Users },
     { title: "Serviços", url: "/servicos", icon: Scissors },
     { title: "Funcionários", url: "/funcionarios", icon: UserCog },
+   { title: "Produtos", url: "/produtos", icon: Package },
     // gerente não acessa relatórios
     { title: "Configurações", url: "/configuracoes", icon: Settings },
   ],
@@ -57,6 +59,7 @@ const allItems = {
     { title: "Clientes", url: "/clientes", icon: Users },
     { title: "Serviços", url: "/servicos", icon: Scissors },
     { title: "Funcionários", url: "/funcionarios", icon: UserCog },
+   { title: "Produtos", url: "/produtos", icon: Package },
     { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
     { title: "Configurações", url: "/configuracoes", icon: Settings },
   ],
