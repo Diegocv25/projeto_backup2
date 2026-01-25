@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { addDays, format, getDay, parseISO, startOfDay } from "date-fns";
+import { addDays, format } from "date-fns";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/auth/auth-context";
-import { buildAvailableSlots } from "@/lib/scheduling";
+import { useAvailableSlots } from "@/hooks/useAvailableSlots";
 import { usePortalSalaoByToken } from "@/hooks/usePortalSalaoByToken";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -197,74 +197,13 @@ export default function ClientePortalAgendamentoFormPage() {
     setHora("");
   }, [funcionarioId, data]);
 
-  const slotsQuery = useQuery({
-    queryKey: ["portal-slots", funcionarioId, data, selectedServico?.duracao_minutos, agendamentoId],
-    enabled: !!funcionarioId && !!data && !!selectedServico?.duracao_minutos,
-    queryFn: async () => {
-      const day = new Date(`${data}T00:00:00`);
-      const dow = getDay(day);
-
-      // Portal do cliente: use RPC SECURITY DEFINER para evitar falhas por RLS/tenant em alguns cenários.
-      if (!salaoQuery.data?.id) return [] as string[];
-      const sb = supabase as any;
-      const { data: horarios, error: horErr } = await sb.rpc("portal_horarios_funcionario_public", {
-        _salao_id: salaoQuery.data.id,
-        _funcionario_id: funcionarioId,
-      });
-      if (horErr) throw horErr;
-
-      const rows = (horarios ?? []) as any[];
-       // Copia o comportamento da gestão: match EXATO do dia da semana (0=dom..6=sáb).
-       // Se não existir horário cadastrado para o dia (ex.: domingo fechado), não oferece slots.
-       const horario = rows.find((r) => Number(r.dia_semana) === dow) ?? null;
-
-      if (!horario) return [] as string[];
-
-      const start = startOfDay(day);
-      const next = addDays(start, 1);
-
-      const { data: busy, error: busyErr } = await supabase
-        .from("agendamentos")
-        .select("id,data_hora_inicio,total_duracao_minutos,status")
-        .eq("funcionario_id", funcionarioId)
-        .gte("data_hora_inicio", start.toISOString())
-        .lt("data_hora_inicio", next.toISOString())
-        .neq("status", "cancelado");
-      if (busyErr) throw busyErr;
-
-      const busyMapped = (busy ?? []).map((b: any) => ({
-        id: String(b.id),
-        start: format(new Date(b.data_hora_inicio), "HH:mm"),
-        durationMinutes: Number(b.total_duracao_minutos),
-      }));
-
-      // Em edição: permite o slot do próprio agendamento atual
-      if (isEdit && agendamentoQuery.data) {
-        const selfStart = format(new Date(agendamentoQuery.data.data_hora_inicio), "HH:mm");
-        const selfDuration = Number(agendamentoQuery.data.total_duracao_minutos);
-        return buildAvailableSlots({
-          workStart: String(horario.inicio),
-          workEnd: String(horario.fim),
-          lunchStart: (horario.almoco_inicio as any) ?? null,
-          lunchEnd: (horario.almoco_fim as any) ?? null,
-          slotStepMinutes: 30,
-          serviceDurationMinutes: Number(selectedServico?.duracao_minutos ?? 0),
-          busy: busyMapped
-            .filter((b) => !(b.start === selfStart && b.durationMinutes === selfDuration))
-            .map((b) => ({ start: b.start, durationMinutes: b.durationMinutes })),
-        });
-      }
-
-      return buildAvailableSlots({
-        workStart: String(horario.inicio),
-        workEnd: String(horario.fim),
-        lunchStart: (horario.almoco_inicio as any) ?? null,
-        lunchEnd: (horario.almoco_fim as any) ?? null,
-        slotStepMinutes: 30,
-        serviceDurationMinutes: Number(selectedServico?.duracao_minutos ?? 0),
-        busy: busyMapped.map((b) => ({ start: b.start, durationMinutes: b.durationMinutes })),
-      });
-    },
+  const slotsQuery = useAvailableSlots({
+    funcionarioId: funcionarioId || null,
+    data: data || null,
+    serviceDurationMinutes: selectedServico?.duracao_minutos ?? null,
+    salaoId: salaoQuery.data?.id ?? null,
+    excludeAgendamentoId: isEdit && agendamentoQuery.data ? agendamentoQuery.data.id : null,
+    usePortalRpc: true,
   });
 
   const policyMode = String(salaoQuery.data?.agendamento_antecedencia_modo ?? "horas");
