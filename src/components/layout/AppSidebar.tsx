@@ -122,11 +122,11 @@ export function AppSidebar() {
                 <img
                   src={salaoLogoUrl}
                   alt={`Logo do estabelecimento ${salaoNome}`}
-                  className="h-16 w-16 rounded-md object-contain"
+                  className="h-20 w-20 rounded-md object-contain"
                   loading="lazy"
                 />
               ) : (
-                <div className="h-16 w-16 rounded-md bg-sidebar-primary" aria-hidden="true" />
+                <div className="h-20 w-20 rounded-md bg-sidebar-primary" aria-hidden="true" />
               )}
 
               {!isCollapsed && (
