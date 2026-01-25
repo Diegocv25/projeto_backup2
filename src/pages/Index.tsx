@@ -6,8 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useSalaoId } from "@/hooks/useSalaoId";
-import { formatBRL } from "@/pages/relatorios/relatorios-utils";
-import { FinancialKpiCard } from "@/components/kpis/FinancialKpiCard";
 
 function MetricCard({
   title,
@@ -61,7 +59,7 @@ const Index = () => {
     enabled: !!salaoId,
     queryFn: async () => {
       const nowIso = new Date().toISOString();
-      const [clientesCount, agendHojeCount, agendConcluidosMes, comissoesMes, vendasProdutosMes, statusHoje, proximosAgendamentos] = await Promise.all([supabase.from("clientes").select("id", {
+      const [clientesCount, agendHojeCount, agendConcluidosMes, statusHoje, proximosAgendamentos] = await Promise.all([supabase.from("clientes").select("id", {
         count: "exact",
         head: true
       }).eq("salao_id", salaoId as string), supabase.from("agendamentos").select("id", {
@@ -70,10 +68,6 @@ const Index = () => {
       }).eq("salao_id", salaoId as string).gte("data_hora_inicio", todayStart.toISOString()).lt("data_hora_inicio", new Date(todayEnd.getTime() + 1).toISOString()),
       // serviços realizados no mês = agendamentos concluídos no mês
       supabase.from("agendamentos").select("total_valor").eq("salao_id", salaoId as string).eq("status", "concluido").gte("data_hora_inicio", monthStart.toISOString()).lt("data_hora_inicio", new Date(monthEnd.getTime() + 1).toISOString()),
-      // comissões do mês (calculadas quando o agendamento vira "concluido")
-      supabase.from("comissoes").select("valor_calculado").eq("salao_id", salaoId as string).gte("created_at", monthStart.toISOString()).lt("created_at", new Date(monthEnd.getTime() + 1).toISOString()),
-      // vendas de produtos do mês
-      supabase.from("vendas_produtos").select("total_venda").eq("salao_id", salaoId as string).gte("created_at", monthStart.toISOString()).lt("created_at", new Date(monthEnd.getTime() + 1).toISOString()),
       // status (hoje)
       supabase.from("agendamentos").select("status").eq("salao_id", salaoId as string).gte("data_hora_inicio", todayStart.toISOString()).lt("data_hora_inicio", new Date(todayEnd.getTime() + 1).toISOString()),
       // próximos 5
@@ -81,14 +75,8 @@ const Index = () => {
       if (clientesCount.error) throw clientesCount.error;
       if (agendHojeCount.error) throw agendHojeCount.error;
       if (agendConcluidosMes.error) throw agendConcluidosMes.error;
-      if (comissoesMes.error) throw comissoesMes.error;
-      if (vendasProdutosMes.error) throw vendasProdutosMes.error;
       if (statusHoje.error) throw statusHoje.error;
       if (proximosAgendamentos.error) throw proximosAgendamentos.error;
-      const receitaServicos = (agendConcluidosMes.data ?? []).reduce((acc: number, r: any) => acc + Number(r.total_valor ?? 0), 0);
-      const receitaVendasProdutos = (vendasProdutosMes.data ?? []).reduce((acc: number, r: any) => acc + Number(r.total_venda ?? 0), 0);
-      const receitaBruta = receitaServicos + receitaVendasProdutos;
-      const comissoes = (comissoesMes.data ?? []).reduce((acc: number, r: any) => acc + Number(r.valor_calculado ?? 0), 0);
       const statusCounts = (statusHoje.data ?? []).reduce((acc: Record<DashboardStatus, number>, r: any) => {
         const s = String(r.status) as DashboardStatus;
         if (s in acc) acc[s] += 1;
@@ -103,9 +91,6 @@ const Index = () => {
         clientesTotal: clientesCount.count ?? 0,
         agendamentosHoje: agendHojeCount.count ?? 0,
         servicosRealizadosMes: (agendConcluidosMes.data ?? []).length,
-        receitaBruta,
-        comissoes,
-        receitaLiquida: receitaBruta - comissoes,
         statusCounts,
         proximosAgendamentos: proximosAgendamentos.data ?? []
       };
@@ -131,27 +116,6 @@ const Index = () => {
         <MetricCard title="Total de clientes" value={String(dashboard?.clientesTotal ?? "—")} />
         <MetricCard title="Agendamentos de hoje" value={String(dashboard?.agendamentosHoje ?? "—")} />
         <MetricCard title="Serviços realizados (mês)" value={String(dashboard?.servicosRealizadosMes ?? "—")} />
-      </section>
-
-      <section className="grid gap-4 grid-cols-1 md:grid-cols-3">
-        <FinancialKpiCard
-          title="Receita bruta"
-          value={dashboard ? formatBRL(dashboard.receitaBruta) : "—"}
-          subtitle="Serviços + Produtos (mês)"
-        />
-        
-        <FinancialKpiCard
-          title="Comissões"
-          value={dashboard ? formatBRL(dashboard.comissoes) : "—"}
-          subtitle="Total do mês"
-        />
-        
-        <FinancialKpiCard
-          title="Receita líquida"
-          value={dashboard ? formatBRL(dashboard.receitaLiquida) : "—"}
-          subtitle="Receita bruta − Comissões (mês)"
-          highlight={true}
-        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
