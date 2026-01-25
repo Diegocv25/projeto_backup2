@@ -32,7 +32,11 @@ cd <YOUR_PROJECT_NAME>
 # Step 3: Install the necessary dependencies.
 npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Step 4: Create your local environment file (recommended)
+# Note: this repo uses `.env.local` (gitignored by default via *.local)
+cp .env.example .env.local
+
+# Step 5: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 
@@ -59,6 +63,24 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+
+## Multi-tenant (convenção de nomes)
+
+Este produto é um SaaS multi-tenant para múltiplos nichos (clínicas, barbearias, salões, etc.).
+
+- **Tenant = Estabelecimento** (termo de negócio e do frontend daqui pra frente)
+- **Banco legado**: por compatibilidade, o schema atual ainda usa `saloes` / `salao_id`.
+- **Regra de isolamento**: nenhum estabelecimento enxerga dados de outro (RLS no Supabase).
+
+### Como usar no código
+
+Para novas telas/features, prefira o alias semântico:
+
+```ts
+import { useEstabelecimentoId } from "@/hooks/useEstabelecimentoId";
+```
+
+Isso mantém o código “agnóstico a nicho” sem exigir renomeações arriscadas no banco agora.
 
 ## How can I deploy this project?
 

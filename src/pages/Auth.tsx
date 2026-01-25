@@ -1,0 +1,230 @@
+import { useMemo, useState } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { z } from "zod";
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/auth/auth-context";
+import { strongPasswordSchema } from "@/lib/password-policy";
+import { AuthForm } from "@/pages/auth/AuthForm";
+import { ForgotPasswordDialog } from "@/pages/auth/ForgotPasswordDialog";
+import { ResetPasswordForm } from "@/pages/auth/ResetPasswordForm";
+
+const emailSchema = z.string().trim().email("Informe um email válido").max(255);
+
+const signInSchema = z.object({
+  email: emailSchema,
+  password: z.string().min(1, "Informe sua senha"),
+});
+
+const signUpSchema = z
+  .object({
+    email: emailSchema,
+    password: strongPasswordSchema,
+    confirmPassword: z.string().min(1, "Repita sua senha"),
+  })
+  .superRefine((val, ctx) => {
+    if (val.password !== val.confirmPassword) {
+      ctx.addIssue({ code: "custom", message: "As senhas não conferem", path: ["confirmPassword"] });
+    }
+  });
+
+function getFriendlyAuthError(message?: string) {
+  const m = (message ?? "").toLowerCase();
+
+  if (m.includes("rate limit") || m.includes("too many") || m.includes("over email send rate limit")) {
+    return "Limite de tentativas/emails do Supabase atingido. Aguarde alguns minutos e tente novamente (ou use outro email). Se ainda ocorrer, verifique Auth → Rate Limits no Supabase.";
+  }
+
+  if (m.includes("invalid login") || m.includes("invalid") || m.includes("credentials")) {
+    return "Email ou senha inválidos.";
+  }
+  if (m.includes("user already registered")) {
+    return "Este email já está cadastrado. Tente entrar.";
+  }
+  if (m.includes("password") && m.includes("weak")) {
+    return "Senha fraca. Use no mínimo 8 caracteres, com 1 letra maiúscula e 1 número.";
+  }
+  if (m.includes("email") && (m.includes("not confirmed") || m.includes("not verified") || m.includes("confirm"))) {
+    return "Email ainda não confirmado no Supabase. Para um fluxo sem confirmação, desative 'Confirm email' no Supabase (Auth → Providers → Email) e recrie/confirmar os usuários de teste.";
+  }
+
+  return message ?? "Não foi possível concluir a operação.";
+}
+
+export default function AuthPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+
+  const [loading, setLoading] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const allowSignup = Boolean((location.state as any)?.allowSignup);
+  const [mode, setMode] = useState<"signin" | "signup">(allowSignup ? "signup" : "signin");
+
+  const isRecovery = useMemo(() => {
+    const sp = new URLSearchParams(location.search);
+    const qType = sp.get("type");
+    const h = location.hash ?? "";
+    return qType === "recovery" || h.includes("type=recovery") || h.includes("recovery");
+  }, [location.hash, location.search]);
+
+  const redirectTo = useMemo(() => {
+    const from = (location.state as any)?.from;
+    return typeof from === "string" && from.length > 0 ? from : "/";
+  }, [location.state]);
+
+  if (user && !isRecovery) {
+    return <Navigate to={redirectTo} replace />;
+  }
+
+  async function handleSignIn(form: { email: string; password: string }) {
+    const parsed = signInSchema.safeParse(form);
+    if (!parsed.success) {
+      toast({ title: "Verifique os campos", description: parsed.error.issues[0]?.message });
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: parsed.data.email,
+      password: parsed.data.password,
+    });
+    setLoading(false);
+
+    if (error) {
+      toast({ title: "Falha ao entrar", description: getFriendlyAuthError(error.message), variant: "destructive" });
+      return;
+    }
+
+    navigate(redirectTo, { replace: true });
+  }
+
+  async function handleSignUp(form: { email: string; password: string; confirmPassword?: string }) {
+    const parsed = signUpSchema.safeParse(form);
+    if (!parsed.success) {
+      toast({ title: "Verifique os campos", description: parsed.error.issues[0]?.message });
+      return;
+    }
+
+    setLoading(true);
+    const { data, error } = await supabase.auth.signUp({
+      email: parsed.data.email,
+      password: parsed.data.password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth`,
+      },
+    });
+
+    if (error) {
+      setLoading(false);
+      toast({ title: "Falha ao cadastrar", description: getFriendlyAuthError(error.message), variant: "destructive" });
+      return;
+    }
+
+    // Fluxo desejado: cria conta e volta para a tela de login.
+    // (Sem auto-login / sem redirect automático, para evitar cair em telas do portal antes do login.)
+    setLoading(false);
+    toast({
+      title: "Conta criada",
+      description: "Agora entre com seu email e senha para continuar.",
+    });
+    setMode("signin");
+
+    // Se o Supabase retornou sessão por configuração (confirm email OFF), garantimos logout
+    // para manter o fluxo determinístico (cadastro -> login).
+    if (data.session) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  return (
+    <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-md items-center px-4 py-10">
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="text-xl">{isRecovery ? "Definir nova senha" : "Acessar"}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="mt-2">
+            {isRecovery ? (
+              <ResetPasswordForm
+                onSuccess={() => {
+                  navigate(redirectTo, { replace: true });
+                }}
+              />
+            ) : null}
+
+            {allowSignup ? (
+              <div className="mb-4 flex gap-2">
+                <Button
+                  type="button"
+                  variant={mode === "signin" ? "default" : "secondary"}
+                  className="flex-1"
+                  onClick={() => setMode("signin")}
+                >
+                  Entrar
+                </Button>
+                <Button
+                  type="button"
+                  variant={mode === "signup" ? "default" : "secondary"}
+                  className="flex-1"
+                  onClick={() => setMode("signup")}
+                >
+                  Criar conta
+                </Button>
+              </div>
+            ) : null}
+
+            {!isRecovery ? (
+              mode === "signup" && allowSignup ? (
+                <AuthForm
+                  mode="signup"
+                  loading={loading}
+                  submitLabel="Criar conta"
+                  onSubmit={(data) =>
+                    handleSignUp({ email: data.email, password: data.password, confirmPassword: data.confirmPassword })
+                  }
+                  passwordAutoComplete="new-password"
+                />
+              ) : (
+                <div className="space-y-3">
+                  <AuthForm
+                    mode="signin"
+                    loading={loading}
+                    onSubmit={(data) => handleSignIn({ email: data.email, password: data.password })}
+                  />
+
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto w-full p-0 text-sm"
+                    onClick={() => setForgotOpen(true)}
+                  >
+                    Esqueci minha senha
+                  </Button>
+                </div>
+              )
+            ) : null}
+
+            {allowSignup ? (
+              <p className="mt-4 text-xs text-muted-foreground">
+                Dica: use um email válido para recuperar o acesso.
+              </p>
+            ) : (
+              <p className="mt-4 text-xs text-muted-foreground">Não tem acesso? Solicite ao administrador/gerente do seu negócio.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <ForgotPasswordDialog open={forgotOpen} onOpenChange={setForgotOpen} />
+    </div>
+  );
+}
+
