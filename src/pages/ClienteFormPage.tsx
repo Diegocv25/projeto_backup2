@@ -8,11 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 import { FormPageShell } from "@/components/layout/FormPageShell";
 
@@ -21,8 +17,33 @@ type ClienteForm = {
   nome: string;
   telefone?: string;
   email?: string;
-  data_nascimento?: Date | null;
+  data_nascimento?: string;
 };
+
+// Converte dd/mm/yyyy para Date ou null
+function parseDataNascimento(value: string): Date | null {
+  if (!value || value.trim() === "") return null;
+  const parts = value.split("/");
+  if (parts.length !== 3) return null;
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1; // JS months are 0-indexed
+  const year = parseInt(parts[2], 10);
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  const date = new Date(year, month, day);
+  if (date.getDate() !== day || date.getMonth() !== month || date.getFullYear() !== year) return null;
+  return date;
+}
+
+// Converte Date para dd/mm/yyyy
+function formatDataNascimento(date: Date | string | null): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
 
 export default function ClienteFormPage() {
   const qc = useQueryClient();
@@ -32,7 +53,7 @@ export default function ClienteFormPage() {
 
   const { data: salaoId } = useSalaoId();
 
-  const [form, setForm] = useState<ClienteForm>({ nome: "", telefone: "", email: "", data_nascimento: null });
+  const [form, setForm] = useState<ClienteForm>({ nome: "", telefone: "", email: "", data_nascimento: "" });
 
   const clienteQuery = useQuery({
     queryKey: ["cliente", editingId],
@@ -57,20 +78,21 @@ export default function ClienteFormPage() {
       nome: clienteQuery.data.nome,
       telefone: clienteQuery.data.telefone ?? "",
       email: clienteQuery.data.email ?? "",
-      data_nascimento: clienteQuery.data.data_nascimento ? new Date(clienteQuery.data.data_nascimento) : null,
+      data_nascimento: formatDataNascimento(clienteQuery.data.data_nascimento),
     });
   }, [clienteQuery.data, editingId]);
 
   const upsertMutation = useMutation({
     mutationFn: async (payload: ClienteForm) => {
       if (!salaoId) throw new Error("Cadastre o salão em Configurações antes.");
+      const dataNascimento = parseDataNascimento(payload.data_nascimento || "");
       const { error } = await supabase.from("clientes").upsert({
         id: payload.id,
         salao_id: salaoId,
         nome: payload.nome.trim(),
         telefone: payload.telefone?.trim() || null,
         email: payload.email?.trim() || null,
-        data_nascimento: payload.data_nascimento ? format(payload.data_nascimento, "yyyy-MM-dd") : null,
+        data_nascimento: dataNascimento ? format(dataNascimento, "yyyy-MM-dd") : null,
       });
       if (error) throw error;
     },
@@ -148,32 +170,13 @@ export default function ClienteFormPage() {
               />
             </div>
           <div className="grid gap-2">
-            <Label htmlFor="data_nascimento">Data de nascimento</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  id="data_nascimento"
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !form.data_nascimento && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {form.data_nascimento ? format(form.data_nascimento, "dd/MM/yyyy") : <span>Selecione uma data</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={form.data_nascimento ?? undefined}
-                  onSelect={(date) => setForm((p) => ({ ...p, data_nascimento: date ?? null }))}
-                  disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-                  initialFocus
-                  className="pointer-events-auto"
-                />
-              </PopoverContent>
-            </Popover>
+            <Label htmlFor="data_nascimento">Data de nascimento (dd/mm/yyyy)</Label>
+            <Input
+              id="data_nascimento"
+              placeholder="dd/mm/yyyy"
+              value={form.data_nascimento ?? ""}
+              onChange={(e) => setForm((p) => ({ ...p, data_nascimento: e.target.value }))}
+            />
           </div>
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
