@@ -24,7 +24,7 @@ export default function ClientesPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clientes")
-        .select("id,nome,telefone,email,created_at,ultima_visita")
+        .select("id,nome,telefone,email,data_nascimento,created_at,ultima_visita")
         .eq("salao_id", salaoId as string)
         .order("nome");
       if (error) throw error;
@@ -161,6 +161,7 @@ export default function ClientesPage() {
                   <TableHead>Nome</TableHead>
                   <TableHead>Telefone</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Data de nascimento</TableHead>
                   <TableHead>Cadastrado em</TableHead>
                   <TableHead>Última visita</TableHead>
                   <TableHead className="text-right">Atendimentos</TableHead>
@@ -175,6 +176,15 @@ export default function ClientesPage() {
                     <TableCell className="font-medium">{c.nome}</TableCell>
                     <TableCell>{c.telefone ?? "—"}</TableCell>
                     <TableCell>{c.email ?? "—"}</TableCell>
+                    <TableCell>
+                      {c.data_nascimento 
+                        ? new Date(c.data_nascimento + 'T00:00:00').toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric'
+                          })
+                        : "—"}
+                    </TableCell>
                     <TableCell>{c.created_at ? String(c.created_at).slice(0, 10) : "—"}</TableCell>
                     <TableCell>{c.ultima_visita ?? "—"}</TableCell>
                     <TableCell className="text-right tabular-nums">{c.atendimentos_count ?? 0}</TableCell>
@@ -202,7 +212,7 @@ export default function ClientesPage() {
 
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-sm text-muted-foreground">
+                    <TableCell colSpan={10} className="text-sm text-muted-foreground">
                       Nenhum cliente encontrado.
                     </TableCell>
                   </TableRow>
