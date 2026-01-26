@@ -368,6 +368,23 @@ export default function ConfiguracoesPage() {
             <div className="text-sm text-muted-foreground">
               Papel atual: {myRolesQuery.isLoading ? "carregando…" : (myRolesQuery.data ?? []).join(", ") || "nenhum"}
             </div>
+
+            {!myRolesQuery.isLoading && (myRolesQuery.data ?? []).length === 0 ? (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                <div className="font-medium">Primeiro acesso</div>
+                <div className="mt-1 text-muted-foreground">
+                  Para liberar o sistema para esta empresa:
+                  <ol className="mt-2 list-decimal space-y-1 pl-5">
+                    <li>
+                      Preencha os dados do <span className="font-medium">Estabelecimento</span> e clique em <span className="font-medium">Salvar</span>.
+                    </li>
+                    <li>
+                      Depois clique em <span className="font-medium">Definir este usuário como Admin</span> para assumir o acesso do seu estabelecimento.
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            ) : null}
             {!(myRolesQuery.data ?? []).includes("admin") && !(myRolesQuery.data ?? []).includes("staff") ? (
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground">
