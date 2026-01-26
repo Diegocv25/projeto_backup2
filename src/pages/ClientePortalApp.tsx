@@ -10,6 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 import { usePortalSalaoByToken } from "@/hooks/usePortalSalaoByToken";
 
@@ -17,6 +22,7 @@ const clienteSchema = z.object({
   nome: z.string().trim().min(2, "Informe o nome").max(120),
   telefone: z.string().trim().max(40).optional(),
   email: z.string().trim().email("Informe um email válido").max(255).optional(),
+  data_nascimento: z.date().optional(),
 });
 
 function PortalShell({
@@ -59,6 +65,7 @@ export default function ClientePortalAppPage() {
     nome: "",
     telefone: "",
     email: user?.email ?? "",
+    data_nascimento: null as Date | null,
   });
 
   const salaoQuery = usePortalSalaoByToken(tokenValue);
@@ -69,7 +76,7 @@ export default function ClientePortalAppPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clientes")
-        .select("id,nome,telefone,email")
+        .select("id,nome,telefone,email,data_nascimento")
         .eq("salao_id", salaoQuery.data!.id)
         .eq("auth_user_id", user!.id)
         .maybeSingle();
@@ -142,6 +149,7 @@ export default function ClientePortalAppPage() {
         nome: parsed.data.nome,
         telefone: parsed.data.telefone?.trim() || null,
         email: parsed.data.email?.trim() || null,
+        data_nascimento: form.data_nascimento ? format(form.data_nascimento, "yyyy-MM-dd") : null,
       });
       if (error) throw error;
     },
@@ -215,6 +223,34 @@ export default function ClientePortalAppPage() {
                   value={form.email}
                   onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
                 />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="data_nascimento">Data de nascimento</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="data_nascimento"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !form.data_nascimento && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {form.data_nascimento ? format(form.data_nascimento, "dd/MM/yyyy") : <span>Selecione uma data</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={form.data_nascimento ?? undefined}
+                      onSelect={(date) => setForm((p) => ({ ...p, data_nascimento: date ?? null }))}
+                      disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
