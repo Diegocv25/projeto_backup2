@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { BarChart3, CalendarDays, LayoutDashboard, LogOut, Package, Scissors, Settings, UserCog, Users, Wallet } from "lucide-react";
 
 import { NavLink } from "@/components/NavLink";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Sidebar,
   SidebarContent,
@@ -67,8 +68,10 @@ const allItems = {
 } as const;
 
 export function AppSidebar() {
-  const { state } = useSidebar();
-  const isCollapsed = state === "collapsed";
+  const { state, isMobile: sidebarIsMobile } = useSidebar();
+  const hookIsMobile = useIsMobile();
+  const isMobile = sidebarIsMobile || hookIsMobile;
+  const isCollapsed = state === "collapsed" && !isMobile;
   const navigate = useNavigate();
   const { user } = useAuth();
   const { role, salaoId } = useAccess();
@@ -152,7 +155,7 @@ export function AppSidebar() {
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
                     >
                       <item.icon className="mr-2 h-4 w-4" />
-                      {!isCollapsed && <span>{item.title}</span>}
+                      <span className={isCollapsed ? "sr-only" : ""}>{item.title}</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -170,7 +173,7 @@ export function AppSidebar() {
           ) : null}
           <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
-            {!isCollapsed && <span>Sair</span>}
+            <span className={isCollapsed ? "sr-only" : ""}>Sair</span>
           </Button>
         </div>
       </SidebarFooter>
