@@ -2,3 +2,6 @@ project_id = "qmxbuvdvhsgauigareok"
 
 [functions.admin-create-auth-user]
 verify_jwt = false
+
+[functions.tenant-onboarding]
+verify_jwt = false
