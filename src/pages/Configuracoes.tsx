@@ -381,7 +381,7 @@ export default function ConfiguracoesPage() {
                   {bootstrapAdminMutation.isPending ? "Aplicando…" : "Definir este usuário como Admin (1ª vez)"}
                 </Button>
                 <div className="text-xs text-muted-foreground">
-                  Observação: isso só funciona na primeira vez (quando ainda não existe nenhum Admin no sistema).
+                  Observação: isso funciona no primeiro acesso de cada empresa (quando o estabelecimento ainda não tem um Admin).
                 </div>
               </div>
             ) : null}

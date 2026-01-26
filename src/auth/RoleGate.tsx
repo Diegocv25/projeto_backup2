@@ -3,6 +3,7 @@ import type { AppRole } from "@/auth/access-context";
 import { useAccess } from "@/auth/access-context";
 
 function defaultRedirect(role: AppRole | null) {
+  if (!role) return "/configuracoes";
   if (role === "profissional") return "/profissional/agendamentos";
   return "/";
 }

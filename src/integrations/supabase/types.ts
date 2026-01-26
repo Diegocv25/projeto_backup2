@@ -599,6 +599,7 @@ export type Database = {
           agendamento_antecedencia_horas: number
           agendamento_antecedencia_modo: string
           created_at: string
+          created_by_user_id: string | null
           endereco: string | null
           id: string
           logo_url: string | null
@@ -611,6 +612,7 @@ export type Database = {
           agendamento_antecedencia_horas?: number
           agendamento_antecedencia_modo?: string
           created_at?: string
+          created_by_user_id?: string | null
           endereco?: string | null
           id?: string
           logo_url?: string | null
@@ -623,6 +625,7 @@ export type Database = {
           agendamento_antecedencia_horas?: number
           agendamento_antecedencia_modo?: string
           created_at?: string
+          created_by_user_id?: string | null
           endereco?: string | null
           id?: string
           logo_url?: string | null

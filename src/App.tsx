@@ -70,6 +70,9 @@ const App = () => (
                     <Route path="/profissional/comissoes" element={<ProfissionalComissoesPage />} />
                   </Route>
 
+                  {/* Configurações (onboarding): acessível para usuário logado mesmo sem role */}
+                  <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+
                   {/* Admin/Gerente/Recepcionista/Staff */}
                   <Route element={<RoleGate allowed={["admin", "staff", "gerente", "recepcionista"]} />}>
                     <Route path="/" element={<Index />} />
@@ -92,7 +95,6 @@ const App = () => (
                     <Route path="/produtos" element={<ProdutosPage />} />
 
                     <Route path="/relatorios" element={<RelatoriosPage />} />
-                    <Route path="/configuracoes" element={<ConfiguracoesPage />} />
                   </Route>
                 </Route>
               </Route>
