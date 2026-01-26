@@ -45,6 +45,21 @@ function formatDataNascimento(date: Date | string | null): string {
   return `${day}/${month}/${year}`;
 }
 
+// Aplica máscara dd/mm/yyyy enquanto digita
+function maskDataNascimento(value: string): string {
+  // Remove tudo que não é número
+  const numbers = value.replace(/\D/g, "");
+  
+  // Aplica a máscara progressivamente
+  if (numbers.length <= 2) {
+    return numbers;
+  } else if (numbers.length <= 4) {
+    return `${numbers.slice(0, 2)}/${numbers.slice(2)}`;
+  } else {
+    return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4, 8)}`;
+  }
+}
+
 export default function ClienteFormPage() {
   const qc = useQueryClient();
   const nav = useNavigate();
@@ -174,8 +189,9 @@ export default function ClienteFormPage() {
             <Input
               id="data_nascimento"
               placeholder="dd/mm/yyyy"
+              maxLength={10}
               value={form.data_nascimento ?? ""}
-              onChange={(e) => setForm((p) => ({ ...p, data_nascimento: e.target.value }))}
+              onChange={(e) => setForm((p) => ({ ...p, data_nascimento: maskDataNascimento(e.target.value) }))}
             />
           </div>
 
