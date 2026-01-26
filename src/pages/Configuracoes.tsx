@@ -139,6 +139,40 @@ export default function ConfiguracoesPage() {
     return roles.includes("admin") || roles.includes("gerente");
   }, [myRolesQuery.data]);
 
+  const isAdmin = useMemo(() => {
+    const roles = myRolesQuery.data ?? [];
+    return roles.includes("admin");
+  }, [myRolesQuery.data]);
+
+  const [newUser, setNewUser] = useState({ email: "", password: "" });
+
+  const createAuthUserMutation = useMutation({
+    mutationFn: async () => {
+      const email = newUser.email.trim().toLowerCase();
+      if (!email) throw new Error("Informe um email");
+
+      const pwdParsed = strongPasswordSchema.safeParse(newUser.password);
+      if (!pwdParsed.success) throw new Error(pwdParsed.error.issues[0]?.message ?? "Senha inválida");
+
+      const { data, error } = await supabase.functions.invoke("admin-create-auth-user", {
+        body: { email, password: newUser.password },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error ?? "Falha ao criar usuário");
+      return data as { ok: true; user_id?: string | null; already_exists?: boolean };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: data.already_exists ? "Usuário já existe" : "Usuário criado",
+        description: data.already_exists
+          ? "Já havia um usuário com esse email no Auth."
+          : "Usuário criado no Auth. Agora ele pode fazer login e seguir o onboarding.",
+      });
+      setNewUser({ email: "", password: "" });
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
   const uploadLogoMutation = useMutation({
     mutationFn: async (file: File) => {
       const salaoId = salaoQuery.data?.id;
@@ -400,6 +434,40 @@ export default function ConfiguracoesPage() {
                 <div className="text-xs text-muted-foreground">
                   Observação: isso funciona no primeiro acesso de cada empresa (quando o estabelecimento ainda não tem um Admin).
                 </div>
+              </div>
+            ) : null}
+
+            {isAdmin ? (
+              <div className="mt-4 border-t pt-4">
+                <div className="text-sm font-medium">Criar usuário (teste)</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Cria um login no Supabase Auth. Esse usuário ainda não terá role; ele fará login e seguirá o primeiro acesso para criar o estabelecimento e virar admin.
+                </div>
+                <form
+                  className="mt-3 grid gap-3 sm:grid-cols-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    createAuthUserMutation.mutate();
+                  }}
+                >
+                  <div className="grid gap-2">
+                    <Label>Email</Label>
+                    <Input value={newUser.email} onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))} autoComplete="email" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Senha</Label>
+                    <PasswordInput
+                      value={newUser.password}
+                      onChange={(e) => setNewUser((p) => ({ ...p, password: e.target.value }))}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 flex justify-end">
+                    <Button type="submit" disabled={createAuthUserMutation.isPending}>
+                      {createAuthUserMutation.isPending ? "Criando…" : "Criar usuário"}
+                    </Button>
+                  </div>
+                </form>
               </div>
             ) : null}
           </CardContent>
