@@ -5,6 +5,7 @@ import RelatoriosComparativos from "@/pages/relatorios/RelatoriosComparativos";
 import RelatoriosDespesas from "@/pages/relatorios/RelatoriosDespesas";
 import RelatoriosPorFuncionario from "@/pages/relatorios/RelatoriosPorFuncionario";
 import RelatoriosConcluidosPorDiaSemana from "@/pages/relatorios/RelatoriosConcluidosPorDiaSemana";
+import RelatoriosProdutos from "@/pages/relatorios/RelatoriosProdutos";
 
 export default function RelatoriosPage() {
   const hoje = useMemo(() => new Date(), []);
@@ -32,6 +33,8 @@ export default function RelatoriosPage() {
       <RelatoriosPorFuncionario inicio={inicio} fim={fim} />
 
       <RelatoriosDespesas competencia={competencia} onChangeCompetencia={setCompetencia} inicio={inicio} fim={fim} />
+
+      <RelatoriosProdutos inicio={inicio} fim={fim} />
     </div>
   );
 }
