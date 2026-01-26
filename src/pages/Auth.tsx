@@ -61,7 +61,9 @@ export default function AuthPage() {
 
   const [loading, setLoading] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
-  const allowSignup = Boolean((location.state as any)?.allowSignup);
+  const state = (location.state as any) ?? {};
+  const from = state?.from as string | undefined;
+  const allowSignup = state?.portal === "cliente" || (typeof from === "string" && from.startsWith("/cliente/"));
   const [mode, setMode] = useState<"signin" | "signup">(allowSignup ? "signup" : "signin");
 
   const isRecovery = useMemo(() => {
@@ -72,7 +74,6 @@ export default function AuthPage() {
   }, [location.hash, location.search]);
 
   const redirectTo = useMemo(() => {
-    const from = (location.state as any)?.from;
     return typeof from === "string" && from.length > 0 ? from : "/";
   }, [location.state]);
 
