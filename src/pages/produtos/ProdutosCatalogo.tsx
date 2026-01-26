@@ -33,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
    const [isDialogOpen, setIsDialogOpen] = useState(false);
    const [editingProduto, setEditingProduto] = useState<Produto | null>(null);
   const [selectedCategoria, setSelectedCategoria] = useState<string | null>(null);
+  const [selectedUnidade, setSelectedUnidade] = useState<string>("un");
  
    const produtosQuery = useQuery({
      queryKey: ["produtos", salaoId],
@@ -64,6 +65,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
           unidade: produto.unidade as string,
           preco_venda: produto.preco_venda as number,
           custo_medio: produto.custo_medio as number,
+          estoque_atual: produto.estoque_atual as number,
           estoque_minimo: produto.estoque_minimo as number,
           ativo: produto.ativo ?? true,
         };
@@ -88,9 +90,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
      saveMutation.mutate({
        nome: formData.get("nome") as string,
       categoria: selectedCategoria || null,
-       unidade: formData.get("unidade") as string,
+      unidade: selectedUnidade,
        preco_venda: Number(formData.get("preco_venda")),
        custo_medio: Number(formData.get("custo_medio")),
+      estoque_atual: Number(formData.get("estoque_atual")),
        estoque_minimo: Number(formData.get("estoque_minimo")),
        ativo: formData.get("ativo") === "on",
      });
@@ -99,6 +102,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
    function openDialog(produto: Produto | null) {
      setEditingProduto(produto);
     setSelectedCategoria(produto?.categoria || null);
+    setSelectedUnidade(produto?.unidade || "un");
      setIsDialogOpen(true);
    }
  
@@ -136,8 +140,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
                   </Select>
                  </div>
                  <div className="space-y-2">
-                   <Label htmlFor="unidade">Unidade *</Label>
-                   <Input id="unidade" name="unidade" defaultValue={editingProduto?.unidade || "un"} required />
+                  <Label htmlFor="unidade">Unidade de medida *</Label>
+                  <Select value={selectedUnidade} onValueChange={setSelectedUnidade}>
+                    <SelectTrigger id="unidade">
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="un">Unidade (un)</SelectItem>
+                      <SelectItem value="kg">Quilograma (kg)</SelectItem>
+                      <SelectItem value="g">Grama (g)</SelectItem>
+                      <SelectItem value="L">Litro (L)</SelectItem>
+                      <SelectItem value="ml">Mililitro (ml)</SelectItem>
+                      <SelectItem value="cx">Caixa (cx)</SelectItem>
+                      <SelectItem value="pct">Pacote (pct)</SelectItem>
+                      <SelectItem value="m">Metro (m)</SelectItem>
+                    </SelectContent>
+                  </Select>
                  </div>
                  <div className="space-y-2">
                    <Label htmlFor="preco_venda">Preço de venda (R$) *</Label>
@@ -148,6 +166,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
                    <Input id="custo_medio" name="custo_medio" type="number" step="0.01" min="0" defaultValue={editingProduto?.custo_medio || 0} required />
                  </div>
                  <div className="space-y-2">
+                  <Label htmlFor="estoque_atual">Estoque atual *</Label>
+                  <Input id="estoque_atual" name="estoque_atual" type="number" step="0.01" min="0" defaultValue={editingProduto?.estoque_atual || 0} required />
+                </div>
+                <div className="space-y-2">
                    <Label htmlFor="estoque_minimo">Estoque mínimo *</Label>
                    <Input id="estoque_minimo" name="estoque_minimo" type="number" step="0.01" min="0" defaultValue={editingProduto?.estoque_minimo || 0} required />
                  </div>
