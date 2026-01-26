@@ -10,11 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 import { usePortalSalaoByToken } from "@/hooks/usePortalSalaoByToken";
 
@@ -22,7 +19,6 @@ const clienteSchema = z.object({
   nome: z.string().trim().min(2, "Informe o nome").max(120),
   telefone: z.string().trim().max(40).optional(),
   email: z.string().trim().email("Informe um email válido").max(255).optional(),
-  data_nascimento: z.date().optional(),
 });
 
 function PortalShell({
@@ -65,7 +61,9 @@ export default function ClientePortalAppPage() {
     nome: "",
     telefone: "",
     email: user?.email ?? "",
-    data_nascimento: null as Date | null,
+    dia_nascimento: "",
+    mes_nascimento: "",
+    ano_nascimento: "",
   });
 
   const salaoQuery = usePortalSalaoByToken(tokenValue);
@@ -143,13 +141,30 @@ export default function ClientePortalAppPage() {
       });
       if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Verifique os campos");
 
+      // Constrói a data de nascimento se todos os campos estiverem preenchidos
+      let dataNascimento: Date | null = null;
+      if (form.dia_nascimento && form.mes_nascimento && form.ano_nascimento) {
+        const dia = parseInt(form.dia_nascimento, 10);
+        const mes = parseInt(form.mes_nascimento, 10) - 1; // JS months are 0-indexed
+        const ano = parseInt(form.ano_nascimento, 10);
+        dataNascimento = new Date(ano, mes, dia);
+        // Valida se a data é válida
+        if (
+          dataNascimento.getDate() !== dia ||
+          dataNascimento.getMonth() !== mes ||
+          dataNascimento.getFullYear() !== ano
+        ) {
+          throw new Error("Data de nascimento inválida");
+        }
+      }
+
       const { error } = await supabase.from("clientes").insert({
         salao_id: salaoQuery.data.id,
         auth_user_id: user.id,
         nome: parsed.data.nome,
         telefone: parsed.data.telefone?.trim() || null,
         email: parsed.data.email?.trim() || null,
-        data_nascimento: form.data_nascimento ? format(form.data_nascimento, "yyyy-MM-dd") : null,
+        data_nascimento: dataNascimento ? format(dataNascimento, "yyyy-MM-dd") : null,
       });
       if (error) throw error;
     },
@@ -225,32 +240,64 @@ export default function ClientePortalAppPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="data_nascimento">Data de nascimento</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="data_nascimento"
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !form.data_nascimento && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {form.data_nascimento ? format(form.data_nascimento, "dd/MM/yyyy") : <span>Selecione uma data</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={form.data_nascimento ?? undefined}
-                      onSelect={(date) => setForm((p) => ({ ...p, data_nascimento: date ?? null }))}
-                      disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-                      initialFocus
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Label>Data de nascimento</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Select value={form.dia_nascimento} onValueChange={(v) => setForm((p) => ({ ...p, dia_nascimento: v }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Dia" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map((dia) => (
+                          <SelectItem key={dia} value={String(dia)}>
+                            {dia}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Select value={form.mes_nascimento} onValueChange={(v) => setForm((p) => ({ ...p, mes_nascimento: v }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Mês" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[
+                          { value: "1", label: "Janeiro" },
+                          { value: "2", label: "Fevereiro" },
+                          { value: "3", label: "Março" },
+                          { value: "4", label: "Abril" },
+                          { value: "5", label: "Maio" },
+                          { value: "6", label: "Junho" },
+                          { value: "7", label: "Julho" },
+                          { value: "8", label: "Agosto" },
+                          { value: "9", label: "Setembro" },
+                          { value: "10", label: "Outubro" },
+                          { value: "11", label: "Novembro" },
+                          { value: "12", label: "Dezembro" },
+                        ].map((mes) => (
+                          <SelectItem key={mes.value} value={mes.value}>
+                            {mes.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Select value={form.ano_nascimento} onValueChange={(v) => setForm((p) => ({ ...p, ano_nascimento: v }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Ano" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 127 }, (_, i) => new Date().getFullYear() - i).map((ano) => (
+                          <SelectItem key={ano} value={String(ano)}>
+                            {ano}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
 
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
