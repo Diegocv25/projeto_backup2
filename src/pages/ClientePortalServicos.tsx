@@ -68,6 +68,7 @@ export default function ClientePortalServicosPage() {
       const { data, error } = await supabase
         .from("servicos")
         .select("id,nome,duracao_minutos,valor,ativo")
+        .eq("salao_id", salaoQuery.data!.id)
         .eq("ativo", true)
         .order("nome");
       if (error) throw error;

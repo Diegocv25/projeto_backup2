@@ -57,6 +57,8 @@ export default function ClientePortalAppPage() {
   const { user } = useAuth();
   const tokenValue = useMemo(() => (typeof token === "string" ? token.trim() : ""), [token]);
 
+  const [skipEmailLink, setSkipEmailLink] = useState(false);
+
   const [form, setForm] = useState({
     nome: "",
     telefone: "",
@@ -83,31 +85,53 @@ export default function ClientePortalAppPage() {
     },
   });
 
-  // 1º acesso (cliente já cadastrado pela recepção/painel): vincula automaticamente pelo e-mail
-  useEffect(() => {
-    if (!user?.id) return;
-    if (!user.email) return;
-    if (!salaoQuery.data?.id) return;
-    if (clienteQuery.isLoading) return;
-    if (clienteQuery.data) return;
+  const preCadastroQuery = useQuery({
+    queryKey: ["portal-pre-cadastro-email", salaoQuery.data?.id, user?.email],
+    enabled:
+      !!user?.id &&
+      !!user?.email &&
+      !!salaoQuery.data?.id &&
+      !clienteQuery.isLoading &&
+      !clienteQuery.data &&
+      !skipEmailLink,
+    queryFn: async () => {
+      const sb = supabase as any;
+      const { data, error } = await sb.rpc("portal_find_cliente_by_email", {
+        _salao_id: salaoQuery.data!.id,
+        _email: user!.email,
+      });
+      if (error) throw error;
+      const first = (data ?? [])[0] as { id: string; nome: string } | undefined;
+      return first ?? null;
+    },
+  });
 
-    (async () => {
-      try {
-        const sb = supabase as any;
-        const { data, error } = await sb.rpc("portal_link_cliente_by_email", {
-          _salao_id: salaoQuery.data.id,
-          _user_id: user.id,
-          _email: user.email,
-        });
-        if (error) return;
-        if (data) {
-          await qc.invalidateQueries({ queryKey: ["portal-cliente"] });
-        }
-      } catch {
-        // ignore
+  const vincularPreCadastroMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error("Sessão inválida");
+      if (!user.email) throw new Error("Email não encontrado");
+      if (!salaoQuery.data?.id) throw new Error("Link inválido");
+
+      const sb = supabase as any;
+      const { data, error } = await sb.rpc("portal_link_cliente_by_email", {
+        _salao_id: salaoQuery.data.id,
+        _user_id: user.id,
+        _email: user.email,
+      });
+      if (error) throw error;
+      return data as string | null;
+    },
+    onSuccess: async (clienteId) => {
+      if (clienteId) {
+        await qc.invalidateQueries({ queryKey: ["portal-cliente"] });
+        toast({ title: "Cadastro vinculado" });
+      } else {
+        // não encontrou/ não vinculou
+        setSkipEmailLink(true);
       }
-    })();
-  }, [user?.id, user?.email, salaoQuery.data?.id, clienteQuery.isLoading, clienteQuery.data, qc]);
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
 
   // garante o papel de cliente para aplicar as políticas RLS
   useEffect(() => {
@@ -215,6 +239,28 @@ export default function ClientePortalAppPage() {
             <CardTitle className="text-base">Novo cliente</CardTitle>
           </CardHeader>
           <CardContent>
+            {preCadastroQuery.data ? (
+              <Card className="mb-4">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Encontramos um cadastro neste salão</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Existe um cliente cadastrado neste salão com seu email.
+                    {preCadastroQuery.data.nome ? ` Nome: ${preCadastroQuery.data.nome}.` : ""} Deseja vincular esse cadastro à sua conta?
+                  </p>
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button type="button" variant="secondary" onClick={() => setSkipEmailLink(true)}>
+                      Não vincular
+                    </Button>
+                    <Button type="button" onClick={() => vincularPreCadastroMutation.mutate()} disabled={vincularPreCadastroMutation.isPending}>
+                      {vincularPreCadastroMutation.isPending ? "Vinculando…" : "Vincular"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
             <form
               className="grid gap-4"
               onSubmit={(e) => {
