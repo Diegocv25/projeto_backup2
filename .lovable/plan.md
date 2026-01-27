@@ -1,171 +1,133 @@
 
-Objetivo
-- Permitir que um novo usuário “empresa” (criado pela sua landing page, ou manualmente para testes) consiga:
-  1) fazer login,
-  2) entrar em /configuracoes mesmo sem role,
-  3) criar/configurar o estabelecimento (saloes + dias_funcionamento),
-  4) clicar em “Definir este usuário como Admin (1ª vez)” e então passar a ter acesso total ao sistema daquele tenant.
-- Manter o app principal sem cadastro de empresa (somente login). O cadastro de cliente continua existindo apenas dentro do portal público (/cliente/:token), e o cliente fica restrito ao tenant do token.
+Objetivo (comportamento desejado)
+- O login (email/senha) apenas autentica a pessoa (conta global do Supabase Auth).
+- Cada estabelecimento (salao_id) é independente:
+  - O cliente só “existe” para aquele salão depois de completar o cadastro em `public.clientes` para aquele `salao_id`.
+  - Agendamentos e dados do portal devem depender desse cadastro no salão atual.
+- Não herdar/vincular automaticamente dados de outro salão.
+- Se existir um pré-cadastro no salão com o mesmo email, o portal deve pedir confirmação antes de vincular.
 
-Contexto do que existe hoje (por que hoje não escala multi-tenant via UI)
-- Rotas:
-  - /configuracoes está atrás de <RoleGate allowed={["admin","staff","gerente","recepcionista"]}>. Usuário “novo” (sem role) não entra nessa rota.
-- Banco / RLS:
-  - Para um usuário sem user_roles, current_salao_id() retorna NULL.
-  - As policies atuais de saloes e dias_funcionamento exigem id/current_salao_id e roles, então o usuário novo não consegue nem criar o salao, nem salvar horários.
-  - can_bootstrap_first_admin() hoje é global (impede o “segundo admin” no sistema inteiro), o que bloqueia multi-tenant via fluxo UI.
+Diagnóstico do problema atual
+- As políticas RLS para customer em `clientes`, `agendamentos` e `agendamento_itens` exigem `salao_id = current_salao_id()`.
+- `current_salao_id()` pega o primeiro `salao_id` do usuário (order by created_at asc). Se o cliente já tem role/cadastro no Salão A, ao tentar se cadastrar no Salão B:
+  - o INSERT em `clientes` usa `salao_id = B`
+  - a policy exige `salao_id = current_salao_id() = A`
+  - resultado: “new row violates row-level security policy for table clientes”.
+- No frontend do portal:
+  - Há auto-vínculo por email em `ClientePortalApp.tsx` (chama `portal_link_cliente_by_email` automaticamente).
+  - As páginas de serviços/agendamento buscam `servicos` sem filtrar por `salao_id` (dependem apenas de RLS). Isso pode causar comportamento confuso quando customer tiver acesso a mais de um salão.
 
-Decisões confirmadas com você
-- Empresa: 1 usuário = 1 empresa (um login admin por tenant).
-- Cadastro no app (empresa): desativado (somente login).
-- Portal do cliente: manter cadastro, mas sempre restrito ao tenant do token (já é o comportamento desejado).
+Decisões confirmadas (do que você aprovou)
+- Vínculo por email: “Confirmar antes de vincular”.
+- Acesso sem cadastro: “Ver antes, agendar depois”.
+- Backoffice: “Bloquear backoffice” para role `customer`.
 
-Solução proposta (visão geral)
-A) Ajustes no Banco (RLS + função)
-1) Adicionar uma “âncora de propriedade temporária” para onboarding:
-   - Nova coluna em public.saloes: created_by_user_id uuid (nullable ou não; recomendado nullable com default).
-   - Em onboarding (usuário sem role), o usuário só pode ver/editar o salao que ele mesmo criou (created_by_user_id = auth.uid()).
-   - Isso evita o risco de “ver salões órfãos” de outros tenants e deixa o fluxo seguro.
+Solução proposta (backend/RLS) — tornar customer “multi-salão” sem travar no primeiro tenant
+1) Criar função auxiliar no banco (SECURITY DEFINER)
+- Nova função: `public.has_customer_access(_salao_id uuid) returns boolean`
+- Lógica: retorna `exists` em `public.user_roles` onde:
+  - `user_id = auth.uid()`
+  - `role = 'customer'`
+  - `salao_id = _salao_id`
+- Motivo: trocar a dependência de `current_salao_id()` por um check do tenant da própria linha (row-based), permitindo o mesmo usuário ser cliente em múltiplos salões, sem “travamento”.
 
-2) Liberar INSERT/UPDATE controlado para onboarding em:
-   - public.saloes
-   - public.dias_funcionamento
-   (apenas enquanto o usuário ainda não tem roles e apenas para o salao criado por ele, e somente até o salao ganhar um admin)
+2) Atualizar políticas RLS (customer) para não depender de `current_salao_id()`
+- `public.clientes`
+  - Ajustar policies customer (select/insert/update) para usar:
+    - `has_role(auth.uid(), 'customer')`
+    - `auth_user_id = auth.uid()`
+    - `public.has_customer_access(clientes.salao_id)`
+- `public.agendamentos`
+  - Ajustar policies customer (select/insert/update/delete) para:
+    - `public.has_customer_access(agendamentos.salao_id)`
+    - e garantir “dono” via join com `clientes` (auth_user_id = auth.uid())
+- `public.agendamento_itens`
+  - Ajustar policy customer para:
+    - validar ownership via join `agendamentos -> clientes`
+    - exigir `public.has_customer_access(a.salao_id)` (onde `a` é o agendamento do item)
+- `public.servicos` (SELECT)
+  - Ajustar o caso de customer na policy de SELECT para permitir leitura quando:
+    - `public.has_customer_access(servicos.salao_id)`
+  - Mantém regras existentes para admin/staff/gerente/recepcionista/profissional.
 
-3) Alterar can_bootstrap_first_admin() para deixar de ser global e passar a ser “por usuário”:
-   - Antes: só permite se não existir nenhum admin no sistema.
-   - Depois: permite se ESTE user ainda não é admin de nenhum tenant.
-   - Isso habilita múltiplos tenants, cada um com seu próprio admin.
+Observação de segurança
+- Isso não “mistura” dados entre salões: a linha sempre tem `salao_id`, e a policy exige o role customer naquele `salao_id`.
+- O usuário continuará precisando do cadastro em `clientes` daquele salão para agendar, porque as policies de `agendamentos` exigem o vínculo com `clientes`.
 
-4) Fortalecer policy de INSERT em public.user_roles no bootstrap:
-   - Além de user_id = auth.uid() e role = 'admin', validar que:
-     - o salao_id existe,
-     - ainda não tem admin,
-     - e (recomendado) saloes.created_by_user_id = auth.uid() (para o usuário só conseguir “claim” do próprio estabelecimento criado).
+Solução proposta (backend/RPC) — “confirmar antes de vincular” pré-cadastro por email
+3) Criar uma RPC apenas de “consulta” do possível pré-cadastro
+- Nova função: `public.portal_find_cliente_by_email(_salao_id uuid, _email text)`
+  - SECURITY DEFINER
+  - Retorna algo mínimo (ex.: `id`, `nome`), somente se:
+    - existir cliente no salão com `lower(email)=lower(_email)`
+    - `auth_user_id is null` (ainda não vinculado)
+- Mantemos a RPC existente `portal_link_cliente_by_email` para executar o vínculo após confirmação.
 
-B) Ajustes no Frontend (roteamento + UX)
-1) Permitir acesso a /configuracoes mesmo sem role (para onboarding)
-   - Hoje /configuracoes está dentro do RoleGate de “backoffice”.
-   - Vamos separar /configuracoes em uma rota própria que:
-     - exija login (AuthGate),
-     - mas NÃO exija role (ou use um gate específico que permita role null).
-   - Alternativa adicional (boa prática): quando role for null, redirecionar o usuário automaticamente para /configuracoes em vez de “/” (evita loop).
+Solução proposta (frontend) — portal consistente por salão e sem vínculo automático
+4) Portal: remover vínculo automático e adicionar tela de confirmação
+- Em `src/pages/ClientePortalApp.tsx`:
+  - Remover o `useEffect` que chama `portal_link_cliente_by_email` automaticamente.
+  - Adicionar um “estado” de detecção:
+    - ao carregar o salão + user.email + quando não existir `clientes` vinculado (`clienteQuery.data == null`),
+    - chamar `portal_find_cliente_by_email` e, se retornar algo, mostrar um Card:
+      - “Encontramos um cadastro neste salão com seu email. Deseja vincular?”
+      - Botões: “Vincular” (chama `portal_link_cliente_by_email`) e “Não vincular” (segue para o formulário de novo cadastro).
+  - Importante: não logar dados sensíveis em console.
 
-2) Manter “sem cadastro de empresa” no /auth
-   - Hoje, o “signup” só aparece quando AuthGate define allowSignup para rotas do portal do cliente.
-   - Vamos reforçar isso no /auth para não depender de “qualquer state”:
-     - Só habilitar signup se (location.state.portal === "cliente") OU se a rota de origem for /cliente/...
-     - Resultado: mesmo que alguém tente forçar o state no browser, o app não mostrará signup para empresa.
+5) Portal: filtrar sempre por `salao_id` do token nas queries de lista
+- Em `src/pages/ClientePortalServicos.tsx` e `src/pages/ClientePortalAgendamentoForm.tsx`:
+  - Ajustar query de `servicos` para incluir `.eq("salao_id", salaoQuery.data!.id)` além de `ativo=true`.
+  - Isso evita “misturar serviços” quando o usuário tiver customer role em mais de um salão.
 
-3) Pequenas melhorias de texto no /configuracoes
-   - Atualizar a observação “isso só funciona na primeira vez (quando ainda não existe nenhum Admin no sistema)” para refletir o novo comportamento:
-     - “isso funciona no primeiro acesso de cada empresa (quando o estabelecimento ainda não tem um admin)”.
+6) “Ver antes, agendar depois”
+- Manter o bloqueio já existente do agendamento quando `clienteQuery.data` não existir (isso já cumpre “agendar depois”).
+- Serviços continuam visíveis após login mesmo sem cadastro em `clientes` daquele salão.
 
-Detalhamento técnico (o que será implementado)
+Backoffice: bloquear `customer` (evitar loop e acesso indevido)
+7) Ajustar o redirecionamento padrão para role `customer`
+- Hoje `RoleGate.defaultRedirect(role)` devolve “/” para qualquer role diferente de profissional e null.
+- Para `customer`, isso pode causar redirect loop ou cair em área indevida.
+- Ajuste planejado:
+  - Se `role === "customer"`: redirecionar para uma rota segura (ex.: `/auth` ou `/cliente/:token` quando houver token).
+  - Como o backoffice não tem token, a opção mais robusta é `/auth` com uma mensagem (“Acesso do cliente é pelo link do salão.”).
+- Alternativa (opcional): criar um “CustomerBackofficeBlock” envolvendo o AppLayout que, se role customer, faz redirect para `/auth`.
 
-A) Migração SQL (schema + RLS)
-1) Schema
-- ALTER TABLE public.saloes
-  - ADD COLUMN created_by_user_id uuid NULL
-  - DEFAULT auth.uid() (ou definido via trigger BEFORE INSERT)
-  - Observação: default com auth.uid() é prático para inserts via app. Se preferirmos 100% explícito, podemos setar no frontend no upsert, mas isso expõe o campo ao cliente (a policy precisa garantir que created_by_user_id = auth.uid()).
+Sequência de implementação (quando você aprovar a execução)
+1) Migration (SQL) com:
+   - `create or replace function public.has_customer_access(_salao_id uuid) ... security definer`
+   - `create or replace function public.portal_find_cliente_by_email(...) ... security definer`
+   - Alterações nas policies de:
+     - `clientes` (customer insert/select/update)
+     - `agendamentos` (customer select/insert/update/delete)
+     - `agendamento_itens` (customer policy)
+     - `servicos` (select para customer)
+2) Frontend:
+   - `ClientePortalApp.tsx`: confirmação antes de vincular, removendo auto-link.
+   - `ClientePortalServicos.tsx` e `ClientePortalAgendamentoForm.tsx`: filtrar `servicos` por `salao_id`.
+   - `RoleGate.tsx` (ou gate equivalente): bloquear customer do backoffice com redirect seguro.
+3) Testes manuais (cenários mínimos)
+- Cenário A: Cliente já cadastrado no Salão A entra no link do Salão B
+  - Faz login
+  - Consegue ver serviços do Salão B
+  - Tenta agendar -> pede cadastro
+  - Faz cadastro -> NÃO dá erro de RLS
+  - Depois consegue criar agendamento no Salão B
+- Cenário B: Salão B tinha pré-cadastro por email
+  - Cliente faz login
+  - Portal mostra confirmação “vincular?”
+  - Se “vincular”: cadastro aparece sem preencher formulário
+  - Se “não vincular”: segue fluxo de novo cadastro (e o pré-cadastro continua não vinculado)
+- Cenário C: Cliente tenta acessar backoffice (ex.: “/”)
+  - É redirecionado para `/auth` (ou outra rota segura) sem loop.
 
-2) Policies em public.saloes
-- Manter as policies atuais para usuários com role (tenant normal).
-- Adicionar policies específicas de onboarding:
-  - SELECT: permitir se created_by_user_id = auth.uid() E usuário não tem roles ainda
-  - INSERT: permitir se usuário não tem roles ainda E WITH CHECK created_by_user_id = auth.uid()
-  - UPDATE: permitir se created_by_user_id = auth.uid() E usuário não tem roles ainda E o salao ainda não tem admin
-  - (DELETE opcional) normalmente não precisa para onboarding.
+Riscos e mitigação
+- Risco: tornar customer “multi-salão” pode aumentar a superfície de acesso, se houver query sem filtro por salao_id.
+  - Mitigação: filtrar explicitamente por salao_id nas telas do portal (principalmente `servicos`) e manter RLS por `salao_id`.
+- Risco: alterações de policy podem afetar usuários existentes.
+  - Mitigação: políticas novas mantêm as mesmas restrições de ownership, apenas removem a dependência de `current_salao_id()` para customer.
 
-3) Policies em public.dias_funcionamento (onboarding)
-- Adicionar policy de INSERT/UPDATE/SELECT para onboarding:
-  - Usuário sem roles
-  - E existe saloes s onde s.id = dias_funcionamento.salao_id
-  - E s.created_by_user_id = auth.uid()
-  - E ainda não existe admin para s.id
-- Isso permite que /configuracoes consiga criar e salvar horários antes do bootstrap do admin.
-
-4) Função public.can_bootstrap_first_admin(user_id uuid)
-- Alterar para: “usuário ainda não é admin em nenhum lugar”.
-- Não será mais global.
-
-5) Policy de INSERT em public.user_roles (bootstrap admin)
-- Atualizar/ recriar a policy user_roles_insert_bootstrap_first_admin para:
-  - user_id = auth.uid()
-  - role = 'admin'
-  - can_bootstrap_first_admin(auth.uid()) = true
-  - salao_id válido
-  - salao_id não tem admin ainda
-  - (recomendado) saloes.created_by_user_id = auth.uid() para garantir “claim” do próprio salao.
-
-B) Ajustes no React
-1) Rotas (src/App.tsx)
-- Mover /configuracoes para fora do RoleGate de backoffice, mantendo:
-  - <AuthGate> obrigatório
-  - <AppLayout> opcional (pode manter, pois sidebar já lida com role null).
-- Estrutura sugerida:
-  - AuthGate -> AppLayout -> rota /configuracoes (sem RoleGate)
-  - E RoleGate continua protegendo as demais rotas do backoffice.
-
-2) Redirecionamento quando role = null
-- Ajustar RoleGate (src/auth/RoleGate.tsx) para que:
-  - se role for null, o redirect padrão seja /configuracoes (em vez de /).
-  - evita loop e direciona o usuário para onboarding imediatamente.
-
-3) Reforço “sem signup de empresa” (src/pages/Auth.tsx)
-- Trocar a lógica de allowSignup:
-  - em vez de Boolean(location.state.allowSignup),
-  - usar uma condição mais forte baseada em portal === "cliente" (setado pelo AuthGate quando vem do portal) e/ou pathname do “from”.
-- Resultado:
-  - app principal: só login
-  - portal cliente: login + criar conta (restrito ao tenant pelo token, como você quer).
-
-4) /configuracoes UX (src/pages/Configuracoes.tsx)
-- Ajustar textos do card de RBAC para refletir “primeiro acesso do estabelecimento”.
-- (Opcional) Mostrar um bloco “Onboarding” quando myRolesQuery retornar vazio:
-  - Explicar os 2 passos: 1) Salvar estabelecimento 2) Definir admin
-  - Isso reduz confusão para novos usuários.
-
-Como você vai testar (passo a passo)
-1) Criar um usuário de teste (empresa) no Supabase Dashboard (Auth > Users)
-- Importante: este passo não é via SQL no Supabase (criar usuário diretamente por SQL não é suportado/encorajado em Supabase, pois auth.users é gerenciado).
-2) Fazer login com esse usuário no app
-3) Confirmar que ele é enviado para /configuracoes (ou consegue acessar /configuracoes)
-4) Preencher nome do estabelecimento e salvar
-5) Definir como admin no botão “Definir este usuário como Admin (1ª vez)”
-6) Verificar que:
-- role passa a ser “admin”
-- sidebar passa a exibir o menu completo
-- dados e queries ficam isolados por tenant
-
-Observações importantes sobre a sua landing page (produção)
-- A landing page deve criar o usuário no Auth via Admin API (service role) e entregar as credenciais de forma controlada (p.ex. e-mail “boas-vindas” ou tela pós-compra).
-- Esse frontend (Lovable) continuará com login-only para empresas.
-- Para automatizar 100% o onboarding (criar usuário + criar salao + inserir role admin), a forma recomendada é uma Edge Function dedicada (pública porém protegida por chave/assinatura/captcha ou chamada server-to-server pelo seu backend da landing). Isso fica como próximo passo, mas não é obrigatório para destravar o multi-tenant via UI agora.
-
-Riscos/atenções (segurança e consistência)
-- Evitar “SELECT de salões órfãos” para usuários sem role: por isso a coluna created_by_user_id e policy baseada nela.
-- Garantir que dias_funcionamento no onboarding só possa ser alterado pelo criador do salao e somente antes de existir admin.
-- Garantir que após o bootstrap, a administração siga estritamente via RLS de roles (padrão já adotado no projeto).
-- Não armazenar roles no frontend (já está correto: roles vêm do banco via AccessProvider).
-
-Entregáveis (o que será mudado quando você aprovar)
-- Migração SQL em supabase/migrations/…:
-  - ALTER TABLE saloes add created_by_user_id
-  - Atualização/criação de RLS policies em saloes e dias_funcionamento
-  - Atualização da função can_bootstrap_first_admin
-  - Atualização da policy user_roles_insert_bootstrap_first_admin
-- Código React:
-  - src/App.tsx: liberar /configuracoes para usuários logados sem role
-  - src/auth/RoleGate.tsx: redirect role null -> /configuracoes
-  - src/pages/Auth.tsx: reforçar que signup só existe para portal do cliente
-  - src/pages/Configuracoes.tsx: texto/UX de onboarding
-
-Critério de pronto
-- Um novo usuário (sem user_roles) consegue:
-  - logar,
-  - acessar /configuracoes,
-  - salvar seu salao + horários,
-  - virar admin do seu próprio salao,
-  - e a partir daí acessar o backoffice normalmente, com isolamento multi-tenant garantido pelo RLS.
+Entregável final
+- Cliente com login global consegue entrar em qualquer portal, mas só consegue agendar e ver “seus dados” após se cadastrar como cliente naquele salão.
+- Cadastro em um salão não é herdado por outro.
+- Pré-cadastro por email só é vinculado após confirmação explícita do usuário.
+- Role customer bloqueado do backoffice.
