@@ -838,6 +838,7 @@ export type Database = {
           nome: string
         }[]
       }
+      has_customer_access: { Args: { _salao_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -862,6 +863,13 @@ export type Database = {
         Returns: {
           id: string
           status: Database["public"]["Enums"]["agendamento_status"]
+        }[]
+      }
+      portal_find_cliente_by_email: {
+        Args: { _email: string; _salao_id: string }
+        Returns: {
+          id: string
+          nome: string
         }[]
       }
       portal_horarios_funcionario_public: {

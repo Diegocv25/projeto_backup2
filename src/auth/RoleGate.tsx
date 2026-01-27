@@ -4,6 +4,7 @@ import { useAccess } from "@/auth/access-context";
 
 function defaultRedirect(role: AppRole | null) {
   if (!role) return "/configuracoes";
+  if (role === "customer") return "/auth";
   if (role === "profissional") return "/profissional/agendamentos";
   return "/";
 }
@@ -21,6 +22,11 @@ export function RoleGate({ allowed }: { allowed: AppRole[] }) {
   }
 
   if (!role || !allowed.includes(role)) {
+    // Customer não acessa backoffice. Evita loop em /auth (que redirecionaria para "/").
+    if (role === "customer") {
+      return <Navigate to={defaultRedirect(role)} replace state={{ blocked: "customer_backoffice" }} />;
+    }
+
     return <Navigate to={defaultRedirect(role)} replace state={{ from: location.pathname }} />;
   }
 

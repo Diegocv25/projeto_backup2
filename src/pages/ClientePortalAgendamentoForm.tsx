@@ -150,12 +150,13 @@ export default function ClientePortalAgendamentoFormPage() {
   }, [agendamentoQuery.data]);
 
   const servicosQuery = useQuery({
-    queryKey: ["portal-servicos"],
+    queryKey: ["portal-servicos", salaoQuery.data?.id],
     enabled: !!salaoQuery.data?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("servicos")
         .select("id,nome,duracao_minutos,valor,ativo")
+        .eq("salao_id", salaoQuery.data!.id)
         .eq("ativo", true)
         .order("nome");
       if (error) throw error;

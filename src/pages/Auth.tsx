@@ -77,8 +77,41 @@ export default function AuthPage() {
     return typeof from === "string" && from.length > 0 ? from : "/";
   }, [location.state]);
 
-  if (user && !isRecovery) {
+  // Se o usuário é cliente e tentou acessar o backoffice, mantemos ele aqui sem redirecionar
+  // para evitar loop (/auth -> / -> RoleGate -> /auth ...).
+  if (user && !isRecovery && (state as any)?.blocked !== "customer_backoffice") {
     return <Navigate to={redirectTo} replace />;
+  }
+
+  if (user && !isRecovery && (state as any)?.blocked === "customer_backoffice") {
+    return (
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-md items-center px-4 py-10">
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle className="text-xl">Acesso do cliente</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              O cliente acessa o sistema pelo link do estabelecimento (portal). O painel interno é restrito.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  try {
+                    await supabase.auth.signOut();
+                  } finally {
+                    navigate("/auth", { replace: true });
+                  }
+                }}
+              >
+                Sair
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   async function handleSignIn(form: { email: string; password: string }) {
