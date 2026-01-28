@@ -139,13 +139,14 @@ export default function ClientePortalAppPage() {
     if (!salaoQuery.data?.id) return;
     (async () => {
       try {
-        // evita erro de duplicidade (unique user_id+role)
         const sb = supabase as any;
+        // Importante: NÃO usar upsert padrão aqui, pois ele pode cair em UPDATE e falhar por RLS.
+        // Usamos ignoreDuplicates para gerar ON CONFLICT DO NOTHING.
         await sb
           .from("user_roles")
           .upsert(
             { user_id: user.id, role: "customer", salao_id: salaoQuery.data.id },
-            { onConflict: "user_id,salao_id,role" } as any,
+            { onConflict: "user_id,salao_id,role", ignoreDuplicates: true } as any,
           );
       } catch {
         // ignore

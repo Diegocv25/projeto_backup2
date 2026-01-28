@@ -54,7 +54,10 @@ export default function ClientePortalServicosPage() {
         const sb = supabase as any;
         await sb
           .from("user_roles")
-          .upsert({ user_id: user.id, role: "customer", salao_id: salaoQuery.data.id }, { onConflict: "user_id,salao_id,role" } as any);
+          .upsert(
+            { user_id: user.id, role: "customer", salao_id: salaoQuery.data.id },
+            { onConflict: "user_id,salao_id,role", ignoreDuplicates: true } as any,
+          );
       } catch {
         // ignore
       }
