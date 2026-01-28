@@ -1,7 +1,9 @@
 import { addDays, differenceInCalendarDays, parseISO, startOfMonth } from "date-fns";
 
 export function formatBRL(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const numValue = Number(value);
+  if (!Number.isFinite(numValue)) return "R$ 0,00";
+  return numValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 export function safeNumber(n: unknown) {
