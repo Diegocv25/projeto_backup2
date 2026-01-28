@@ -159,6 +159,22 @@ export default function ClientePortalAppPage() {
       if (!user) throw new Error("Sessão inválida");
       if (!salaoQuery.data?.id) throw new Error("Link inválido");
 
+      // IMPORTANTE: antes de inserir em `clientes`, precisamos garantir que o usuário
+      // tenha `user_roles(customer)` para este salao_id. Caso contrário,
+      // `has_customer_access(salao_id)` falha e o INSERT é bloqueado por RLS.
+      // O useEffect que faz isso pode não ter concluído quando o usuário clica em "Salvar".
+      try {
+        const sb = supabase as any;
+        await sb
+          .from("user_roles")
+          .upsert(
+            { user_id: user.id, role: "customer", salao_id: salaoQuery.data.id },
+            { onConflict: "user_id,salao_id,role", ignoreDuplicates: true } as any,
+          );
+      } catch {
+        // Se falhar, o INSERT abaixo provavelmente falhará por RLS. Deixamos o erro aparecer.
+      }
+
       const parsed = clienteSchema.safeParse({
         nome: form.nome,
         telefone: form.telefone || undefined,
