@@ -6,6 +6,38 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
+/*
+PLANO TÉCNICO — AUTENTICAÇÃO ISOLADA DO PORTAL (SEM IMPLEMENTAR AGORA)
+
+Por que o modelo atual está errado:
+- Supabase Auth é global; se o cliente tem sessão, ele consegue entrar em qualquer /cliente/:token/*.
+- O “gate” atual (AuthGate) usa auth.users e sessão global, o que viola a regra: cada salão é independente.
+- O email existir em outro salão é detectável (pré-cadastro e login global), quebrando o isolamento.
+- SignOut não resolve, pois a sessão global ainda é o único controle de acesso.
+
+Refatoração correta esperada:
+- Portal do cliente com autenticação própria por estabelecimento (multi-tenant real).
+- Supabase Auth continua apenas para backoffice (donos/funcionários).
+- Portal usa tabela própria (ex.: portal_accounts) e Edge Functions para login/cadastro.
+- Sessão do portal deve ser própria (JWT/cookie httpOnly) e escopada ao salão.
+
+Arquivos que precisam ser alterados (na implementação futura):
+- src/App.tsx: remover AuthGate das rotas do portal; criar PortalGate específico.
+- src/pages/ClientePublico.tsx: iniciar fluxo de login/cadastro via Edge Function.
+- src/pages/ClientePortalApp.tsx: trocar useAuth + supabase.auth por sessão do portal.
+- src/pages/ClientePortalMeusAgendamentos.tsx: usar identidade do portal e não auth.users.
+- src/pages/ClientePortalAgendamentoForm.tsx: idem, buscar cliente via portal_account.
+- src/pages/Auth.tsx: separar login backoffice vs portal (ou criar nova tela dedicada ao portal).
+- (novo) hooks/portal-auth, edge functions login/signup, tabela portal_accounts + policies.
+
+Novo fluxo de autenticação do Portal (proposto):
+1) Cliente abre /cliente/:token → valida token → exibe tela de login/cadastro do portal.
+2) Login/cadastro chama Edge Function (scoped ao salao_id) → cria/valida portal_account.
+3) Edge Function emite sessão própria (JWT/cookie httpOnly) com salao_id + portal_account_id.
+4) PortalGate valida sessão do portal (não Supabase Auth) e permite acesso ao /cliente/:token/*.
+5) Mesmo email pode existir em vários salões com senhas diferentes (sem vazamento).
+*/
+
 import { AuthProvider } from "@/auth/auth-context";
 import { AuthGate } from "@/auth/AuthGate";
 import { AccessProvider } from "@/auth/access-context";
