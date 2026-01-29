@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
 
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/auth/auth-context";
+import { getPortalSession, clearPortalSession } from "@/portal/portal-session";
+import { portalLogout, portalUpsertCliente, portalWhoami } from "@/portal/portal-api";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,15 +54,12 @@ export default function ClientePortalAppPage() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const { token } = useParams();
-  const { user } = useAuth();
   const tokenValue = useMemo(() => (typeof token === "string" ? token.trim() : ""), [token]);
-
-  const [skipEmailLink, setSkipEmailLink] = useState(false);
 
   const [form, setForm] = useState({
     nome: "",
     telefone: "",
-    email: user?.email ?? "",
+    email: "",
     dia_nascimento: "",
     mes_nascimento: "",
     ano_nascimento: "",
@@ -70,110 +67,33 @@ export default function ClientePortalAppPage() {
 
   const salaoQuery = usePortalSalaoByToken(tokenValue);
 
-  const clienteQuery = useQuery({
-    queryKey: ["portal-cliente", salaoQuery.data?.id, user?.id],
-    enabled: !!salaoQuery.data?.id && !!user?.id,
+  const session = useMemo(() => (salaoQuery.data?.id ? getPortalSession(salaoQuery.data.id) : null), [salaoQuery.data?.id]);
+
+  const whoamiQuery = useQuery({
+    queryKey: ["portal-whoami", salaoQuery.data?.id, session?.sessionToken],
+    enabled: !!salaoQuery.data?.id && !!session?.sessionToken,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clientes")
-        .select("id,nome,telefone,email,data_nascimento")
-        .eq("salao_id", salaoQuery.data!.id)
-        .eq("auth_user_id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data ?? null;
+      const res = await portalWhoami({ token: tokenValue, session_token: session!.sessionToken });
+      if (!res.ok) throw new Error("error" in res ? res.error : "Sessão inválida");
+      return res;
     },
+    retry: false,
   });
 
-  const preCadastroQuery = useQuery({
-    queryKey: ["portal-pre-cadastro-email", salaoQuery.data?.id, user?.email],
-    enabled:
-      !!user?.id &&
-      !!user?.email &&
-      !!salaoQuery.data?.id &&
-      !clienteQuery.isLoading &&
-      !clienteQuery.data &&
-      !skipEmailLink,
-    queryFn: async () => {
-      const sb = supabase as any;
-      const { data, error } = await sb.rpc("portal_find_cliente_by_email", {
-        _salao_id: salaoQuery.data!.id,
-        _email: user!.email,
-      });
-      if (error) throw error;
-      const first = (data ?? [])[0] as { id: string; nome: string } | undefined;
-      return first ?? null;
-    },
-  });
-
-  const vincularPreCadastroMutation = useMutation({
-    mutationFn: async () => {
-      if (!user?.id) throw new Error("Sessão inválida");
-      if (!user.email) throw new Error("Email não encontrado");
-      if (!salaoQuery.data?.id) throw new Error("Link inválido");
-
-      const sb = supabase as any;
-      const { data, error } = await sb.rpc("portal_link_cliente_by_email", {
-        _salao_id: salaoQuery.data.id,
-        _user_id: user.id,
-        _email: user.email,
-      });
-      if (error) throw error;
-      return data as string | null;
-    },
-    onSuccess: async (clienteId) => {
-      if (clienteId) {
-        await qc.invalidateQueries({ queryKey: ["portal-cliente"] });
-        toast({ title: "Cadastro vinculado" });
-      } else {
-        // não encontrou/ não vinculou
-        setSkipEmailLink(true);
-      }
-    },
-    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
-  });
-
-  // garante o papel de cliente para aplicar as políticas RLS
+  // Preenche email/nome (se existir) a partir do whoami
   useEffect(() => {
-    if (!user?.id) return;
-    if (!salaoQuery.data?.id) return;
-    (async () => {
-      try {
-        const sb = supabase as any;
-        // Importante: NÃO usar upsert padrão aqui, pois ele pode cair em UPDATE e falhar por RLS.
-        // Usamos ignoreDuplicates para gerar ON CONFLICT DO NOTHING.
-        await sb
-          .from("user_roles")
-          .upsert(
-            { user_id: user.id, role: "customer", salao_id: salaoQuery.data.id },
-            { onConflict: "user_id,salao_id,role", ignoreDuplicates: true } as any,
-          );
-      } catch {
-        // ignore
-      }
-    })();
-  }, [user?.id, salaoQuery.data?.id]);
+    if (!whoamiQuery.data?.ok) return;
+    setForm((p) => ({
+      ...p,
+      email: p.email || whoamiQuery.data.email || "",
+      nome: p.nome || whoamiQuery.data.nome || "",
+    }));
+  }, [whoamiQuery.data]);
 
   const criarClienteMutation = useMutation({
     mutationFn: async () => {
-      if (!user) throw new Error("Sessão inválida");
       if (!salaoQuery.data?.id) throw new Error("Link inválido");
-
-      // IMPORTANTE: antes de inserir em `clientes`, precisamos garantir que o usuário
-      // tenha `user_roles(customer)` para este salao_id. Caso contrário,
-      // `has_customer_access(salao_id)` falha e o INSERT é bloqueado por RLS.
-      // O useEffect que faz isso pode não ter concluído quando o usuário clica em "Salvar".
-      try {
-        const sb = supabase as any;
-        await sb
-          .from("user_roles")
-          .upsert(
-            { user_id: user.id, role: "customer", salao_id: salaoQuery.data.id },
-            { onConflict: "user_id,salao_id,role", ignoreDuplicates: true } as any,
-          );
-      } catch {
-        // Se falhar, o INSERT abaixo provavelmente falhará por RLS. Deixamos o erro aparecer.
-      }
+      if (!session?.sessionToken) throw new Error("Sessão do portal inválida");
 
       const parsed = clienteSchema.safeParse({
         nome: form.nome,
@@ -199,15 +119,15 @@ export default function ClientePortalAppPage() {
         }
       }
 
-      const { error } = await supabase.from("clientes").insert({
-        salao_id: salaoQuery.data.id,
-        auth_user_id: user.id,
+      const res = await portalUpsertCliente({
+        token: tokenValue,
+        session_token: session.sessionToken,
         nome: parsed.data.nome,
         telefone: parsed.data.telefone?.trim() || null,
         email: parsed.data.email?.trim() || null,
         data_nascimento: dataNascimento ? format(dataNascimento, "yyyy-MM-dd") : null,
       });
-      if (error) throw error;
+      if (!res.ok) throw new Error("error" in res ? res.error : "Falha ao salvar" );
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["portal-cliente"] });
@@ -221,7 +141,10 @@ export default function ClientePortalAppPage() {
       title="Portal do cliente"
       subtitle={salaoQuery.data ? "Salão: " + salaoQuery.data.nome : ""}
       onLogout={async () => {
-        await supabase.auth.signOut();
+        if (salaoQuery.data?.id && session?.sessionToken) {
+          await portalLogout({ token: tokenValue, session_token: session.sessionToken });
+          clearPortalSession(salaoQuery.data.id);
+        }
         nav("/cliente/" + tokenValue);
       }}
     >
@@ -248,36 +171,26 @@ export default function ClientePortalAppPage() {
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">Solicite um novo link ao salão.</CardContent>
         </Card>
-      ) : clienteQuery.isLoading ? (
-        <div className="text-sm text-muted-foreground">Carregando seu cadastro…</div>
-      ) : !clienteQuery.data ? (
+      ) : whoamiQuery.isLoading ? (
+        <div className="text-sm text-muted-foreground">Carregando sua sessão…</div>
+      ) : !whoamiQuery.data?.ok ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Novo cliente</CardTitle>
+            <CardTitle className="text-base">Sessão inválida</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Faça login novamente.
+            <div className="mt-3">
+              <Button onClick={() => nav(`/cliente/${tokenValue}`)}>Ir para login</Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Seu cadastro neste estabelecimento</CardTitle>
           </CardHeader>
           <CardContent>
-            {preCadastroQuery.data ? (
-              <Card className="mb-4">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Encontramos um cadastro neste salão</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Existe um cliente cadastrado neste salão com seu email.
-                    {preCadastroQuery.data.nome ? ` Nome: ${preCadastroQuery.data.nome}.` : ""} Deseja vincular esse cadastro à sua conta?
-                  </p>
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                    <Button type="button" variant="secondary" onClick={() => setSkipEmailLink(true)}>
-                      Não vincular
-                    </Button>
-                    <Button type="button" onClick={() => vincularPreCadastroMutation.mutate()} disabled={vincularPreCadastroMutation.isPending}>
-                      {vincularPreCadastroMutation.isPending ? "Vinculando…" : "Vincular"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : null}
-
             <form
               className="grid gap-4"
               onSubmit={(e) => {
@@ -374,44 +287,6 @@ export default function ClientePortalAppPage() {
             </form>
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="text-base">Serviços</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">Veja valores e duração média de cada serviço.</p>
-              <Button variant="secondary" className="w-full" onClick={() => nav("/cliente/" + tokenValue + "/servicos")}>
-                Ver serviços
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="text-base">Novo agendamento</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">Escolha serviço, profissional e um horário disponível.</p>
-              <Button className="w-full" onClick={() => nav("/cliente/" + tokenValue + "/novo")}>
-                Agendar agora
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="text-base">Editar / cancelar</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">Veja seus agendamentos e, se necessário, edite ou cancele.</p>
-              <Button variant="secondary" className="w-full" onClick={() => nav("/cliente/" + tokenValue + "/agendamentos")}>
-                Ver agendamentos
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
       )}
     </PortalShell>
   );

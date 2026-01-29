@@ -2,6 +2,8 @@
  import { addDays, format, getDay, startOfDay } from "date-fns";
  import { supabase } from "@/integrations/supabase/client";
  import { buildAvailableSlots } from "@/lib/scheduling";
+import { getPortalSession } from "@/portal/portal-session";
+import { portalAgendamentosOcupados, portalHorariosFuncionario } from "@/portal/portal-api";
  
  type UseAvailableSlotsParams = {
    funcionarioId: string | null;
@@ -40,16 +42,17 @@
        let horario: { inicio: string; fim: string; almoco_inicio: string | null; almoco_fim: string | null } | null = null;
  
        if (usePortalRpc && salaoId) {
-         // Portal: usa RPC SECURITY DEFINER para evitar problemas de RLS
-         const sb = supabase as any;
-         const { data: horarios, error: horErr } = await sb.rpc("portal_horarios_funcionario_public", {
-           _salao_id: salaoId,
-           _funcionario_id: funcionarioId,
-         });
-         if (horErr) throw horErr;
- 
-         const rows = (horarios ?? []) as any[];
-         horario = rows.find((r: any) => Number(r.dia_semana) === dow) ?? null;
+          const session = getPortalSession(salaoId);
+          if (!session?.sessionToken) throw new Error("Sessão do portal inválida");
+
+          const res = await portalHorariosFuncionario({
+            salao_id: salaoId,
+            session_token: session.sessionToken,
+            funcionario_id: funcionarioId,
+          });
+          if (!res.ok) throw new Error("error" in res ? res.error : "Erro ao carregar horários");
+
+          horario = (res.horarios ?? []).find((r) => Number(r.dia_semana) === dow) ?? null;
        } else {
          // Sistema: query direta com RLS
          const { data: horarioData, error: horErr } = await supabase
@@ -68,16 +71,17 @@
         // 2. Buscar agendamentos já ocupados no dia
         let busy: any[] = [];
         if (usePortalRpc && salaoId) {
-          // Portal: precisa enxergar agendamentos de outros clientes sem vazar dados sensíveis.
-          // Usa RPC SECURITY DEFINER que retorna apenas {id, data_hora_inicio, total_duracao_minutos}.
-          const sb = supabase as any;
-          const { data: busyData, error: busyErr } = await sb.rpc("portal_agendamentos_ocupados_public", {
-            _salao_id: salaoId,
-            _funcionario_id: funcionarioId,
-            _dia: data,
+          const session = getPortalSession(salaoId);
+          if (!session?.sessionToken) throw new Error("Sessão do portal inválida");
+
+          const res = await portalAgendamentosOcupados({
+            salao_id: salaoId,
+            session_token: session.sessionToken,
+            funcionario_id: funcionarioId,
+            dia: data,
           });
-          if (busyErr) throw busyErr;
-          busy = (busyData ?? []) as any[];
+          if (!res.ok) throw new Error("error" in res ? res.error : "Erro ao carregar horários ocupados");
+          busy = (res.busy ?? []) as any[];
         } else {
           // Sistema: query direta com RLS
           const start = startOfDay(day);

@@ -5,3 +5,42 @@ verify_jwt = false
 
 [functions.tenant-onboarding]
 verify_jwt = false
+
+[functions.portal-signup]
+verify_jwt = false
+
+[functions.portal-login]
+verify_jwt = false
+
+[functions.portal-whoami]
+verify_jwt = false
+
+[functions.portal-logout]
+verify_jwt = false
+
+[functions.portal-upsert-cliente]
+verify_jwt = false
+
+[functions.portal-servicos]
+verify_jwt = false
+
+[functions.portal-profissionais]
+verify_jwt = false
+
+[functions.portal-horarios-funcionario]
+verify_jwt = false
+
+[functions.portal-agendamentos-ocupados]
+verify_jwt = false
+
+[functions.portal-meus-agendamentos]
+verify_jwt = false
+
+[functions.portal-save-agendamento]
+verify_jwt = false
+
+[functions.portal-cancel-agendamento]
+verify_jwt = false
+
+[functions.portal-get-agendamento]
+verify_jwt = false

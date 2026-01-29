@@ -40,6 +40,7 @@ Novo fluxo de autenticação do Portal (proposto):
 
 import { AuthProvider } from "@/auth/auth-context";
 import { AuthGate } from "@/auth/AuthGate";
+import { PortalGate } from "@/auth/PortalGate";
 import { AccessProvider } from "@/auth/access-context";
 import { RoleGate } from "@/auth/RoleGate";
 
@@ -84,7 +85,7 @@ const App = () => (
               <Route path="/cliente/:token" element={<ClientePublicoPage />} />
 
               {/* Portal do cliente (sem sidebar) */}
-              <Route element={<AuthGate />}>
+              <Route element={<PortalGate />}>
                 <Route path="/cliente/:token/app" element={<ClientePortalAppPage />} />
                 <Route path="/cliente/:token/servicos" element={<ClientePortalServicosPage />} />
                 <Route path="/cliente/:token/novo" element={<ClientePortalAgendamentoFormPage />} />

@@ -174,6 +174,7 @@ export type Database = {
           id: string
           nome: string
           observacoes: string | null
+          portal_account_id: string | null
           salao_id: string
           telefone: string | null
           ultima_visita: string | null
@@ -187,6 +188,7 @@ export type Database = {
           id?: string
           nome: string
           observacoes?: string | null
+          portal_account_id?: string | null
           salao_id: string
           telefone?: string | null
           ultima_visita?: string | null
@@ -200,12 +202,20 @@ export type Database = {
           id?: string
           nome?: string
           observacoes?: string | null
+          portal_account_id?: string | null
           salao_id?: string
           telefone?: string | null
           ultima_visita?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "clientes_portal_account_id_fkey"
+            columns: ["portal_account_id"]
+            isOneToOne: false
+            referencedRelation: "portal_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "clientes_salao_id_fkey"
             columns: ["salao_id"]
@@ -534,6 +544,89 @@ export type Database = {
           },
           {
             foreignKeyName: "movimentacoes_estoque_salao_id_fkey"
+            columns: ["salao_id"]
+            isOneToOne: false
+            referencedRelation: "saloes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_accounts: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          nome: string | null
+          password_hash: string
+          salao_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          nome?: string | null
+          password_hash: string
+          salao_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          nome?: string | null
+          password_hash?: string
+          salao_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_accounts_salao_id_fkey"
+            columns: ["salao_id"]
+            isOneToOne: false
+            referencedRelation: "saloes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          portal_account_id: string
+          revoked_at: string | null
+          salao_id: string
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          portal_account_id: string
+          revoked_at?: string | null
+          salao_id: string
+          token_hash: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          portal_account_id?: string
+          revoked_at?: string | null
+          salao_id?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_sessions_portal_account_id_fkey"
+            columns: ["portal_account_id"]
+            isOneToOne: false
+            referencedRelation: "portal_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_sessions_salao_id_fkey"
             columns: ["salao_id"]
             isOneToOne: false
             referencedRelation: "saloes"

@@ -4,10 +4,15 @@ import { addDays, format } from "date-fns";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/auth/auth-context";
 import { useAvailableSlots } from "@/hooks/useAvailableSlots";
 import { usePortalSalaoByToken } from "@/hooks/usePortalSalaoByToken";
+import { getPortalSession } from "@/portal/portal-session";
+import {
+  portalGetAgendamento,
+  portalProfissionais,
+  portalSaveAgendamento,
+  portalServicos,
+} from "@/portal/portal-api";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,7 +78,6 @@ export default function ClientePortalAgendamentoFormPage() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const { token, id } = useParams();
-  const { user } = useAuth();
   const [search] = useSearchParams();
 
   const tokenValue = useMemo(() => (typeof token === "string" ? token.trim() : ""), [token]);
@@ -89,54 +93,26 @@ export default function ClientePortalAgendamentoFormPage() {
 
   const salaoQuery = usePortalSalaoByToken(tokenValue);
 
-  // garante o papel de cliente para aplicar as políticas RLS (mesmo se o usuário entrar direto nesta rota)
-  useEffect(() => {
-    if (!user?.id) return;
-    if (!salaoQuery.data?.id) return;
-    (async () => {
-      try {
-        const sb = supabase as any;
-        await sb
-          .from("user_roles")
-          .upsert(
-            { user_id: user.id, role: "customer", salao_id: salaoQuery.data.id },
-            { onConflict: "user_id,salao_id,role", ignoreDuplicates: true } as any,
-          );
-      } catch {
-        // ignore
-      }
-    })();
-  }, [user?.id, salaoQuery.data?.id]);
-
-  const clienteQuery = useQuery({
-    queryKey: ["portal-cliente", salaoQuery.data?.id, user?.id],
-    enabled: !!salaoQuery.data?.id && !!user?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clientes")
-        .select("id,nome")
-        .eq("salao_id", salaoQuery.data!.id)
-        .eq("auth_user_id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data ?? null;
-    },
-  });
+  const session = useMemo(() => (salaoQuery.data?.id ? getPortalSession(salaoQuery.data.id) : null), [salaoQuery.data?.id]);
 
   const agendamentoQuery = useQuery({
     queryKey: ["portal-agendamento", agendamentoId],
-    enabled: !!agendamentoId,
+    enabled: !!agendamentoId && !!session?.sessionToken,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("agendamentos")
-        .select(
-          "id,cliente_id,funcionario_id,data_hora_inicio,total_duracao_minutos,total_valor,observacoes,status,itens:agendamento_itens(servico_id)",
-        )
-        .eq("id", agendamentoId as string)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) throw new Error("Agendamento não encontrado.");
-      return data as unknown as LoadedAgendamento;
+      const res = await portalGetAgendamento({ token: tokenValue, session_token: session!.sessionToken, agendamento_id: agendamentoId! });
+      if (!res.ok) throw new Error("error" in res ? res.error : "Agendamento não encontrado.");
+      const a = res.agendamento;
+      return {
+        id: a.id,
+        cliente_id: "",
+        funcionario_id: a.funcionario_id,
+        data_hora_inicio: a.data_hora_inicio,
+        total_duracao_minutos: 0,
+        total_valor: 0,
+        observacoes: a.observacoes,
+        status: a.status as any,
+        itens: a.itens as any,
+      } as LoadedAgendamento;
     },
   });
 
@@ -154,16 +130,11 @@ export default function ClientePortalAgendamentoFormPage() {
 
   const servicosQuery = useQuery({
     queryKey: ["portal-servicos", salaoQuery.data?.id],
-    enabled: !!salaoQuery.data?.id,
+    enabled: !!salaoQuery.data?.id && !!session?.sessionToken,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("servicos")
-        .select("id,nome,duracao_minutos,valor,ativo")
-        .eq("salao_id", salaoQuery.data!.id)
-        .eq("ativo", true)
-        .order("nome");
-      if (error) throw error;
-      return data ?? [];
+      const res = await portalServicos({ token: tokenValue, session_token: session!.sessionToken });
+      if (!res.ok) throw new Error("error" in res ? res.error : "Erro ao carregar serviços");
+      return res.servicos;
     },
   });
 
@@ -180,24 +151,15 @@ export default function ClientePortalAgendamentoFormPage() {
 
   const profissionaisQuery = useQuery({
     queryKey: ["portal-profissionais-por-servico", servicoId],
-    enabled: !!servicoId,
+    enabled: !!servicoId && !!session?.sessionToken,
     queryFn: async () => {
-      const { data: links, error: linkErr } = await supabase
-        .from("servicos_funcionarios")
-        .select("funcionario_id")
-        .eq("servico_id", servicoId);
-      if (linkErr) throw linkErr;
-
-      const ids = Array.from(new Set((links ?? []).map((l: any) => l.funcionario_id as string)));
-      if (ids.length === 0) return [] as IdName[];
-
-      // Segurança: clientes não têm SELECT direto em `funcionarios` (contém dados sensíveis).
-      // Usamos RPC que retorna somente {id,nome} e já filtra por tenant/ativo/profissional.
-      const sb = supabase as any;
-      const { data: fun, error: funErr } = await sb.rpc("funcionarios_public_by_ids", { _ids: ids });
-      if (funErr) throw funErr;
-
-      return (fun ?? []) as IdName[];
+      const res = await portalProfissionais({
+        token: tokenValue,
+        session_token: session!.sessionToken,
+        servico_id: servicoId,
+      });
+      if (!res.ok) throw new Error("error" in res ? res.error : "Erro ao carregar profissionais");
+      return (res.profissionais ?? []) as IdName[];
     },
   });
 
@@ -214,13 +176,9 @@ export default function ClientePortalAgendamentoFormPage() {
     queryKey: ["portal-horarios-profissional", salaoQuery.data?.id, funcionarioId],
     enabled: !!salaoQuery.data?.id && !!funcionarioId,
     queryFn: async () => {
-      const sb = supabase as any;
-      const { data, error } = await sb.rpc("portal_horarios_funcionario_public", {
-        _salao_id: salaoQuery.data!.id,
-        _funcionario_id: funcionarioId,
-      });
-      if (error) throw error;
-      return (data ?? []) as HorarioFuncionarioRow[];
+      // useAvailableSlots já consulta horários+busy via Edge Function; aqui usamos apenas para exibir "dias de atendimento"
+      // Para manter a tela simples, retornamos vazio; os badges são derivados do useAvailableSlots.
+      return [] as HorarioFuncionarioRow[];
     },
   });
 
@@ -286,7 +244,7 @@ export default function ClientePortalAgendamentoFormPage() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!salaoQuery.data?.id) throw new Error("Link inválido.");
-      if (!clienteQuery.data?.id) throw new Error("Conclua seu cadastro de cliente antes.");
+      if (!session?.sessionToken) throw new Error("Sessão inválida.");
       if (!selectedServico) throw new Error("Selecione um serviço.");
       if (!funcionarioId) throw new Error("Selecione um profissional.");
       if (!data) throw new Error("Selecione a data.");
@@ -300,60 +258,19 @@ export default function ClientePortalAgendamentoFormPage() {
       const safetyNow = new Date(now.getTime() + 60_000);
       if (inicioLocal < safetyNow) throw new Error("Não é possível agendar em um horário que já passou.");
 
-      if (!isEdit) {
-        const { data: saved, error } = await supabase
-          .from("agendamentos")
-          .insert({
-            salao_id: salaoQuery.data.id,
-            cliente_id: clienteQuery.data.id,
-            funcionario_id: funcionarioId,
-            data_hora_inicio: inicioLocal.toISOString(),
-            total_duracao_minutos: selectedServico.duracao_minutos,
-            total_valor: selectedServico.valor,
-            status: "marcado",
-            observacoes: obsParsed.data?.trim() ? obsParsed.data.trim() : null,
-          })
-          .select("id")
-          .maybeSingle();
-        if (error) throw error;
-        const newId = saved?.id;
-        if (!newId) throw new Error("Falha ao salvar agendamento.");
-
-        const { error: itemErr } = await supabase.from("agendamento_itens").insert({
-          agendamento_id: newId,
-          servico_id: selectedServico.id,
-          duracao_minutos: selectedServico.duracao_minutos,
-          valor: selectedServico.valor,
-        });
-        if (itemErr) throw itemErr;
-        return newId;
-      }
-
-      const { error: updErr } = await supabase
-        .from("agendamentos")
-        .update({
-          funcionario_id: funcionarioId,
-          data_hora_inicio: inicioLocal.toISOString(),
-          total_duracao_minutos: selectedServico.duracao_minutos,
-          total_valor: selectedServico.valor,
-          observacoes: obsParsed.data?.trim() ? obsParsed.data.trim() : null,
-        })
-        .eq("id", agendamentoId as string);
-      if (updErr) throw updErr;
-
-      // 1 serviço (MVP) -> reescreve itens
-      const { error: delItemErr } = await supabase.from("agendamento_itens").delete().eq("agendamento_id", agendamentoId as string);
-      if (delItemErr) throw delItemErr;
-
-      const { error: itemErr } = await supabase.from("agendamento_itens").insert({
-        agendamento_id: agendamentoId as string,
+      const res = await portalSaveAgendamento({
+        token: tokenValue,
+        session_token: session.sessionToken,
+        agendamento_id: isEdit ? agendamentoId : null,
         servico_id: selectedServico.id,
+        funcionario_id: funcionarioId,
+        data_hora_inicio: inicioLocal.toISOString(),
         duracao_minutos: selectedServico.duracao_minutos,
         valor: selectedServico.valor,
+        observacoes: obsParsed.data?.trim() ? obsParsed.data.trim() : null,
       });
-      if (itemErr) throw itemErr;
-
-      return agendamentoId;
+      if (!res.ok) throw new Error("error" in res ? res.error : "Falha ao salvar agendamento");
+      return res.agendamento_id;
     },
     onSuccess: async () => {
       await Promise.all([
@@ -366,11 +283,11 @@ export default function ClientePortalAgendamentoFormPage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
-  if (!user) {
+  if (!session?.sessionToken) {
     return (
       <PortalShell title="Portal do cliente" onBack={() => nav(`/cliente/${tokenValue}`)}>
         <Card>
-          <CardContent className="py-6 text-sm text-muted-foreground">Faça login para continuar.</CardContent>
+          <CardContent className="py-6 text-sm text-muted-foreground">Entre no portal para continuar.</CardContent>
         </Card>
       </PortalShell>
     );
@@ -386,20 +303,8 @@ export default function ClientePortalAgendamentoFormPage() {
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">Link inválido.</CardContent>
         </Card>
-      ) : salaoQuery.isLoading || clienteQuery.isLoading || (isEdit && agendamentoQuery.isLoading) ? (
+      ) : salaoQuery.isLoading || (isEdit && agendamentoQuery.isLoading) ? (
         <div className="text-sm text-muted-foreground">Carregando…</div>
-      ) : !clienteQuery.data ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Cadastro necessário</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Conclua seu cadastro como cliente antes.
-            <div className="mt-3">
-              <Button onClick={() => nav(`/cliente/${tokenValue}/app`)}>Ir para cadastro</Button>
-            </div>
-          </CardContent>
-        </Card>
       ) : (
         <Card>
           <CardHeader>
