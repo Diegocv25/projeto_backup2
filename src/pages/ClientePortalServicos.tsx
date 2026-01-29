@@ -2,9 +2,9 @@ import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/auth/auth-context";
 import { usePortalSalaoByToken } from "@/hooks/usePortalSalaoByToken";
+import { getPortalSession } from "@/portal/portal-session";
+import { portalServicos } from "@/portal/portal-api";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,55 +39,22 @@ function PortalShell({
 export default function ClientePortalServicosPage() {
   const nav = useNavigate();
   const { token } = useParams();
-  const { user } = useAuth();
 
   const tokenValue = useMemo(() => (typeof token === "string" ? token.trim() : ""), [token]);
 
   const salaoQuery = usePortalSalaoByToken(tokenValue);
 
-  // garante o papel de cliente para aplicar as políticas RLS (mesmo se o usuário entrar direto nesta rota)
-  useEffect(() => {
-    if (!user?.id) return;
-    if (!salaoQuery.data?.id) return;
-    (async () => {
-      try {
-        const sb = supabase as any;
-        await sb
-          .from("user_roles")
-          .upsert(
-            { user_id: user.id, role: "customer", salao_id: salaoQuery.data.id },
-            { onConflict: "user_id,salao_id,role", ignoreDuplicates: true } as any,
-          );
-      } catch {
-        // ignore
-      }
-    })();
-  }, [user?.id, salaoQuery.data?.id]);
+  const session = useMemo(() => (salaoQuery.data?.id ? getPortalSession(salaoQuery.data.id) : null), [salaoQuery.data?.id]);
 
   const servicosQuery = useQuery({
     queryKey: ["portal-servicos-lista", salaoQuery.data?.id],
-    enabled: !!salaoQuery.data?.id,
+    enabled: !!salaoQuery.data?.id && !!session?.sessionToken,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("servicos")
-        .select("id,nome,duracao_minutos,valor,ativo")
-        .eq("salao_id", salaoQuery.data!.id)
-        .eq("ativo", true)
-        .order("nome");
-      if (error) throw error;
-      return data ?? [];
+      const res = await portalServicos({ token: tokenValue, session_token: session!.sessionToken });
+      if (!res.ok) throw new Error("error" in res ? res.error : "Erro ao carregar serviços");
+      return res.servicos;
     },
   });
-
-  if (!user) {
-    return (
-      <PortalShell title="Serviços" onBack={() => nav(`/cliente/${tokenValue}`)}>
-        <Card>
-          <CardContent className="py-6 text-sm text-muted-foreground">Faça login para continuar.</CardContent>
-        </Card>
-      </PortalShell>
-    );
-  }
 
   return (
     <PortalShell

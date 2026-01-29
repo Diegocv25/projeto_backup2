@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/auth/auth-context";
 import { usePortalSalaoByToken } from "@/hooks/usePortalSalaoByToken";
+import { getPortalSession } from "@/portal/portal-session";
+import { portalCancelAgendamento, portalMeusAgendamentos } from "@/portal/portal-api";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,105 +42,38 @@ export default function ClientePortalMeusAgendamentosPage() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const { token } = useParams();
-  const { user } = useAuth();
   const tokenValue = useMemo(() => (typeof token === "string" ? token.trim() : ""), [token]);
   const [cancelId, setCancelId] = useState<string | null>(null);
 
   const salaoQuery = usePortalSalaoByToken(tokenValue);
 
-  // garante o papel de cliente para aplicar as políticas RLS (mesmo se o usuário entrar direto nesta rota)
-  useEffect(() => {
-    if (!user?.id) return;
-    if (!salaoQuery.data?.id) return;
-    (async () => {
-      try {
-        const sb = supabase as any;
-        await sb
-          .from("user_roles")
-          .upsert(
-            { user_id: user.id, role: "customer", salao_id: salaoQuery.data.id },
-            { onConflict: "user_id,salao_id,role", ignoreDuplicates: true } as any,
-          );
-      } catch {
-        // ignore
-      }
-    })();
-  }, [user?.id, salaoQuery.data?.id]);
-
-  const clienteQuery = useQuery({
-    queryKey: ["portal-cliente", salaoQuery.data?.id, user?.id],
-    enabled: !!salaoQuery.data?.id && !!user?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clientes")
-        .select("id,nome")
-        .eq("salao_id", salaoQuery.data!.id)
-        .eq("auth_user_id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data ?? null;
-    },
-  });
+  const session = useMemo(() => (salaoQuery.data?.id ? getPortalSession(salaoQuery.data.id) : null), [salaoQuery.data?.id]);
 
   const agendamentosQuery = useQuery({
-    queryKey: ["portal-meus-agendamentos", clienteQuery.data?.id],
-    enabled: !!clienteQuery.data?.id,
+    queryKey: ["portal-meus-agendamentos", salaoQuery.data?.id, session?.sessionToken],
+    enabled: !!salaoQuery.data?.id && !!session?.sessionToken,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("agendamentos")
-        .select(
-          // NOTE: cliente não deve depender de JOIN direto em `funcionarios` (RLS pode ocultar).
-          "id,data_hora_inicio,status,total_valor,total_duracao_minutos,funcionario_id,itens:agendamento_itens(servico:servicos(nome))",
-        )
-        .eq("cliente_id", clienteQuery.data!.id)
-        .order("data_hora_inicio", { ascending: true });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  const profissionaisMapQuery = useQuery({
-    queryKey: [
-      "portal-profissionais-map",
-      (agendamentosQuery.data ?? []).map((a: any) => a.funcionario_id).filter(Boolean).sort().join(","),
-    ],
-    enabled: (agendamentosQuery.data ?? []).length > 0,
-    queryFn: async () => {
-      const ids = Array.from(new Set((agendamentosQuery.data ?? []).map((a: any) => String(a.funcionario_id)).filter(Boolean)));
-      if (ids.length === 0) return new Map<string, string>();
-
-      const sb = supabase as any;
-      const { data, error } = await sb.rpc("funcionarios_public_by_ids", { _ids: ids });
-      if (error) throw error;
-      const map = new Map<string, string>();
-      for (const row of data ?? []) map.set(String(row.id), String(row.nome));
-      return map;
+      const res = await portalMeusAgendamentos({ token: tokenValue, session_token: session!.sessionToken });
+      if (!res.ok) throw new Error("error" in res ? res.error : "Erro ao carregar agendamentos");
+      return res.agendamentos;
     },
   });
 
   const cancelarMutation = useMutation({
-    // Mesmo formato da gestão (update de status), mas no portal usamos RPC para não falhar por RLS.
     mutationFn: async (vars: { id: string; status: "cancelado" }) => {
-      const sb = supabase as any;
-      const { data, error } = await sb.rpc("portal_cancel_agendamento", { _agendamento_id: vars.id });
-      if (error) throw error;
-      if (!data || (Array.isArray(data) && data.length === 0)) {
-        throw new Error("Não foi possível cancelar este agendamento.");
-      }
+      if (!session?.sessionToken) throw new Error("Sessão inválida");
+      const res = await portalCancelAgendamento({ token: tokenValue, session_token: session.sessionToken, agendamento_id: vars.id });
+      if (!res.ok) throw new Error("error" in res ? res.error : "Não foi possível cancelar este agendamento.");
     },
     onSuccess: async (_data, vars) => {
-      const clienteId = clienteQuery.data?.id;
-
       // Atualização otimista para refletir imediatamente na lista
-      if (clienteId) {
-        qc.setQueryData(["portal-meus-agendamentos", clienteId], (old: any) => {
-          const arr = Array.isArray(old) ? old : [];
-          return arr.map((a: any) => (String(a?.id) === String(vars.id) ? { ...a, status: "cancelado" } : a));
-        });
-      }
+      qc.setQueryData(["portal-meus-agendamentos", salaoQuery.data?.id, session?.sessionToken], (old: any) => {
+        const arr = Array.isArray(old) ? old : [];
+        return arr.map((a: any) => (String(a?.id) === String(vars.id) ? { ...a, status: "cancelado" } : a));
+      });
 
       setCancelId(null);
-      await qc.invalidateQueries({ queryKey: ["portal-meus-agendamentos", clienteId] });
+      await qc.invalidateQueries({ queryKey: ["portal-meus-agendamentos", salaoQuery.data?.id] });
       toast({ title: "Agendamento cancelado" });
     },
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
@@ -159,34 +92,18 @@ export default function ClientePortalMeusAgendamentosPage() {
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">Link inválido.</CardContent>
         </Card>
-       ) : salaoQuery.isLoading || clienteQuery.isLoading ? (
+       ) : salaoQuery.isLoading ? (
         <div className="text-sm text-muted-foreground">Carregando…</div>
        ) : salaoQuery.isError ? (
          <Card>
            <CardContent className="py-6 text-sm text-muted-foreground">Erro ao validar link. Tente novamente.</CardContent>
          </Card>
-      ) : !clienteQuery.data ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Cadastro necessário</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Conclua seu cadastro como cliente antes.
-            <div className="mt-3">
-              <Button onClick={() => nav(`/cliente/${tokenValue}/app`)}>Ir para cadastro</Button>
-            </div>
-          </CardContent>
-        </Card>
       ) : (
         <div className="space-y-3">
           {(agendamentosQuery.data ?? []).map((a: any) => {
-            const servicoNome = (a.itens as any)?.[0]?.servico?.nome as string | undefined;
             const dt = parseISO(String(a.data_hora_inicio));
-            const profNome =
-              (profissionaisMapQuery.data?.get(String(a.funcionario_id)) ??
-                // fallback (se ainda carregando)
-                (profissionaisMapQuery.isLoading ? "Carregando…" : null)) ||
-              "Profissional";
+            const profNome = a.funcionario_nome || "Profissional";
+            const servicoNome = a.servico_nome || undefined;
             return (
               <Card key={a.id}>
                 <CardHeader className="pb-3">
