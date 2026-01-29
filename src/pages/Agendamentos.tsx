@@ -59,12 +59,11 @@ const statusLabel: Record<StatusFilter, string> = {
   cancelado: "Cancelado",
 };
 
-function statusBadgeClassName(status: string): string {
-  if (status === "confirmado") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "marcado") return "border-amber-200 bg-amber-50 text-amber-700";
-  if (status === "concluido") return "border-sky-200 bg-sky-50 text-sky-700";
-  if (status === "cancelado") return "border-rose-200 bg-rose-50 text-rose-700";
-  return "";
+function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "cancelado") return "destructive";
+  if (status === "concluido") return "secondary";
+  if (status === "confirmado") return "default";
+  return "outline";
 }
 
 export default function AgendamentosPage() {
@@ -443,7 +442,7 @@ export default function AgendamentosPage() {
                     </div>
 
                     <div className="flex items-start gap-2">
-                      <Badge variant="outline" className={statusBadgeClassName(String(a.status))}>
+                      <Badge variant={statusBadgeVariant(String(a.status))}>
                         {statusLabel[(a.status as any) ?? "marcado"] ?? String(a.status)}
                       </Badge>
 

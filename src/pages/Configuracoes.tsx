@@ -663,119 +663,96 @@ export default function ConfiguracoesPage() {
             <div className="text-sm text-destructive">Erro ao carregar horários.</div>
           ) : (
             <div className="grid gap-2">
-              {dias.map((d, idx) => {
-                const intervaloAtivo = !d.fechado && Boolean(d.intervalo_inicio || d.intervalo_fim);
-                return (
-                  <div key={d.dia_semana} className="grid grid-cols-1 gap-2 rounded-md border p-3 sm:grid-cols-7 sm:items-center">
-                    <div className="flex items-center gap-2 sm:col-span-2">
-                      <Checkbox
-                        checked={!d.fechado}
-                        onCheckedChange={(v) =>
-                          setDias((prev) => {
-                            const next = [...prev];
-                            const aberto = Boolean(v);
-                            next[idx] = {
-                              ...next[idx],
-                              fechado: !aberto,
-                              abre_em: aberto ? next[idx].abre_em || "09:00" : "",
-                              fecha_em: aberto ? next[idx].fecha_em || "18:00" : "",
-                              intervalo_inicio: aberto ? next[idx].intervalo_inicio || "12:00" : "",
-                              intervalo_fim: aberto ? next[idx].intervalo_fim || "13:00" : "",
-                            };
-                            return next;
-                          })
-                        }
-                      />
-                      <div className="text-sm font-medium">{diasLabel[d.dia_semana]}</div>
-                      <div className="text-xs text-muted-foreground">{d.fechado ? "Fechado" : "Aberto"}</div>
-                    </div>
-
-                    <div className="grid gap-1">
-                      <Label className="text-xs">Abre</Label>
-                      <Input
-                        type="time"
-                        value={d.abre_em}
-                        disabled={d.fechado}
-                        onChange={(e) =>
-                          setDias((prev) => {
-                            const next = [...prev];
-                            next[idx] = { ...next[idx], abre_em: e.target.value };
-                            return next;
-                          })
-                        }
-                      />
-                    </div>
-
-                    <div className="grid gap-1">
-                      <Label className="text-xs">Fecha</Label>
-                      <Input
-                        type="time"
-                        value={d.fecha_em}
-                        disabled={d.fechado}
-                        onChange={(e) =>
-                          setDias((prev) => {
-                            const next = [...prev];
-                            next[idx] = { ...next[idx], fecha_em: e.target.value };
-                            return next;
-                          })
-                        }
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={intervaloAtivo}
-                        disabled={d.fechado}
-                        onCheckedChange={(v) =>
-                          setDias((prev) => {
-                            const next = [...prev];
-                            const ativo = Boolean(v);
-                            next[idx] = {
-                              ...next[idx],
-                              intervalo_inicio: ativo ? next[idx].intervalo_inicio || "12:00" : "",
-                              intervalo_fim: ativo ? next[idx].intervalo_fim || "13:00" : "",
-                            };
-                            return next;
-                          })
-                        }
-                      />
-                      <div className="text-xs text-muted-foreground">Intervalo</div>
-                    </div>
-
-                    <div className="grid gap-1">
-                      <Label className="text-xs">Intervalo início</Label>
-                      <Input
-                        type="time"
-                        value={d.intervalo_inicio}
-                        disabled={d.fechado || !intervaloAtivo}
-                        onChange={(e) =>
-                          setDias((prev) => {
-                            const next = [...prev];
-                            next[idx] = { ...next[idx], intervalo_inicio: e.target.value };
-                            return next;
-                          })
-                        }
-                      />
-                    </div>
-
-                    <div className="grid gap-1">
-                      <Label className="text-xs">Intervalo fim</Label>
-                      <Input
-                        type="time"
-                        value={d.intervalo_fim}
-                        disabled={d.fechado || !intervaloAtivo}
-                        onChange={(e) =>
-                          setDias((prev) => {
-                            const next = [...prev];
-                            next[idx] = { ...next[idx], intervalo_fim: e.target.value };
-                            return next;
-                          })
-                        }
-                      />
-                    </div>
+              {dias.map((d, idx) => (
+                <div key={d.dia_semana} className="grid grid-cols-1 gap-2 rounded-md border p-3 sm:grid-cols-6 sm:items-center">
+                  <div className="flex items-center gap-2 sm:col-span-2">
+                    <Checkbox
+                      checked={!d.fechado}
+                      onCheckedChange={(v) =>
+                        setDias((prev) => {
+                          const next = [...prev];
+                          const aberto = Boolean(v);
+                          next[idx] = {
+                            ...next[idx],
+                            fechado: !aberto,
+                            abre_em: aberto ? next[idx].abre_em || "09:00" : "",
+                            fecha_em: aberto ? next[idx].fecha_em || "18:00" : "",
+                            intervalo_inicio: aberto ? next[idx].intervalo_inicio || "12:00" : "",
+                            intervalo_fim: aberto ? next[idx].intervalo_fim || "13:00" : "",
+                          };
+                          return next;
+                        })
+                      }
+                    />
+                    <div className="text-sm font-medium">{diasLabel[d.dia_semana]}</div>
+                    <div className="text-xs text-muted-foreground">{d.fechado ? "Fechado" : "Aberto"}</div>
                   </div>
-                );
-              })}
+
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Abre</Label>
+                    <Input
+                      type="time"
+                      value={d.abre_em}
+                      disabled={d.fechado}
+                      onChange={(e) =>
+                        setDias((prev) => {
+                          const next = [...prev];
+                          next[idx] = { ...next[idx], abre_em: e.target.value };
+                          return next;
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Fecha</Label>
+                    <Input
+                      type="time"
+                      value={d.fecha_em}
+                      disabled={d.fechado}
+                      onChange={(e) =>
+                        setDias((prev) => {
+                          const next = [...prev];
+                          next[idx] = { ...next[idx], fecha_em: e.target.value };
+                          return next;
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Intervalo início</Label>
+                    <Input
+                      type="time"
+                      value={d.intervalo_inicio}
+                      disabled={d.fechado}
+                      onChange={(e) =>
+                        setDias((prev) => {
+                          const next = [...prev];
+                          next[idx] = { ...next[idx], intervalo_inicio: e.target.value };
+                          return next;
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="grid gap-1">
+                    <Label className="text-xs">Intervalo fim</Label>
+                    <Input
+                      type="time"
+                      value={d.intervalo_fim}
+                      disabled={d.fechado}
+                      onChange={(e) =>
+                        setDias((prev) => {
+                          const next = [...prev];
+                          next[idx] = { ...next[idx], intervalo_fim: e.target.value };
+                          return next;
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
 
               <div className="text-xs text-muted-foreground">
                 Dica: os horários dos funcionários são cadastrados no módulo Funcionários e podem ser diferentes dos horários do salão.
