@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/use-toast";
 import { z } from "zod";
 import { portalLogin, portalSignup } from "@/portal/portal-api";
 import { setPortalSession } from "@/portal/portal-session";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export default function ClientePublicoPage() {
   const nav = useNavigate();
@@ -111,9 +112,8 @@ export default function ClientePublicoPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="password">Senha</Label>
-                  <Input
+                  <PasswordInput
                     id="password"
-                    type="password"
                     value={form.password}
                     onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
                     autoComplete={mode === "signup" ? "new-password" : "current-password"}
