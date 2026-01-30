@@ -117,6 +117,9 @@ export default function ClientePublicoPage() {
                     value={form.password}
                     onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
                     autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    labelShow="Mostrar senha"
+                    labelHide="Ocultar senha"
+                    showTextToggle
                   />
                 </div>
                 <Button type="submit" disabled={busy}>
